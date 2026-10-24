@@ -1,2 +1,2 @@
 # study-app
-Study app built in Flutter
+Study app built in Flutter using Opencode
