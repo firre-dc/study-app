@@ -1,6 +1,6 @@
 # study_app
 
-study app for data nerds
+study app tracking your study habits to help you improve your focus
 
 ## Getting Started
 
