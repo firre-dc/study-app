@@ -1,4 +1,5 @@
 import 'package:android_intent_plus/android_intent.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +16,7 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen>
     with WidgetsBindingObserver {
   bool _usageAccessGranted = false;
   bool _overlayEnabled = false;
+  bool _ignoringBatteryOptimizations = true;
 
   @override
   void initState() {
@@ -37,10 +39,14 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen>
   Future<void> _refresh() async {
     final usageAccess = await BlockerPlatform.isUsageAccessGranted();
     final overlay = await BlockerPlatform.canDrawOverlays();
+    final ignoringBattery = defaultTargetPlatform == TargetPlatform.android
+        ? await BlockerPlatform.isIgnoringBatteryOptimizations()
+        : true;
     if (mounted) {
       setState(() {
         _usageAccessGranted = usageAccess;
         _overlayEnabled = overlay;
+        _ignoringBatteryOptimizations = ignoringBattery;
       });
     }
   }
@@ -93,6 +99,19 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen>
             actionLabel: _overlayEnabled ? 'Granted' : 'Open Settings',
             onPressed: _requestOverlay,
           ),
+          if (defaultTargetPlatform == TargetPlatform.android) ...[
+            const SizedBox(height: 16),
+            _PermissionCard(
+              icon: Icons.battery_saver,
+              title: 'Run in the background',
+              description:
+                  'Recommended: prevents battery saver from stopping your session while the screen is off or another app is open.',
+              granted: _ignoringBatteryOptimizations,
+              actionLabel: _ignoringBatteryOptimizations ? 'Granted' : 'Allow',
+              onPressed: () =>
+                  BlockerPlatform.requestIgnoreBatteryOptimizations(),
+            ),
+          ],
           const SizedBox(height: 24),
           if (allGranted)
             Row(

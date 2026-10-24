@@ -1,9 +1,11 @@
 package be.declippel.firre.study_app
 
+import android.Manifest
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
@@ -13,6 +15,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import android.util.Base64
 import io.flutter.embedding.android.FlutterActivity
@@ -49,6 +52,7 @@ class MainActivity : FlutterActivity() {
         }
 
         const val ACTION_SESSION_ENDED = "focusflow.SESSION_ENDED"
+        private const val REQUEST_POST_NOTIFICATIONS = 1001
 
         // Debug-only hook so instrumentation (adb shell am start) can kick off
         // a session through the exact same code path as the Flutter channel.
@@ -92,6 +96,9 @@ class MainActivity : FlutterActivity() {
         totalSeconds: Int,
         whitelistJson: String
     ) {
+        // A new session replaces any completion alert left in the tray.
+        SessionNotifications.clearCompletion(this)
+
         // Always keep FocusFlow itself allowed so a session can
         // never block the app that is running it.
         val whitelist = JSONArray(whitelistJson)
@@ -105,22 +112,88 @@ class MainActivity : FlutterActivity() {
         if (!hasSelf) whitelist.put(packageName)
 
         val prefs = getSharedPreferences("focusflow_session", Context.MODE_PRIVATE)
-        prefs.edit()
+        // Resuming the same session (e.g. after the system killed the service
+        // or the Flutter process) must not wipe its recorded block attempts.
+        val sameSession = prefs.getString("session_id", null) == sessionId
+        val editor = prefs.edit()
             .putBoolean("active", true)
             .putString("session_id", sessionId)
             .putLong("end_time", endTimeMillis)
             .putInt("total_seconds", totalSeconds)
             .putString("whitelist", whitelist.toString())
-            .putLong("start_time", System.currentTimeMillis())
+            .putBoolean("ended_externally", false)
+        if (!sameSession) {
             // Never leak attempts from a previous session into this one.
-            .putString("attempts", "[]")
-            .apply()
+            editor.putString("attempts", "[]")
+            editor.putLong("start_time", System.currentTimeMillis())
+        }
+        editor.apply()
 
         val serviceIntent = Intent(this, FocusForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
         } else {
             startService(serviceIntent)
+        }
+    }
+
+    /**
+     * Finalizes a naturally completed session: posts the completion
+     * notification, vibrates, clears the native session, and stops the
+     * foreground service. Idempotent: if the service already completed the
+     * session, "active" is false and nothing is shown twice.
+     */
+    private fun completeSessionInternal(sessionId: String?) {
+        val prefs = getSharedPreferences("focusflow_session", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("active", false)) return
+
+        val nativeSessionId = prefs.getString("session_id", null)
+        if (sessionId != null &&
+            nativeSessionId != null &&
+            nativeSessionId != sessionId
+        ) {
+            return
+        }
+
+        // Guard against notifying before the scheduled end (small tolerance
+        // for clock/rounding differences between Dart and the native side).
+        val endTime = prefs.getLong("end_time", 0L)
+        if (endTime > 0 && System.currentTimeMillis() + 2_000 < endTime) {
+            return
+        }
+
+        SessionNotifications.notifySessionComplete(this)
+
+        prefs.edit()
+            .putBoolean("active", false)
+            .putBoolean("ended_externally", false)
+            .remove("session_id")
+            .remove("end_time")
+            .remove("total_seconds")
+            .apply()
+
+        stopService(Intent(this, FocusForegroundService::class.java))
+        try {
+            sendBroadcast(Intent(ACTION_SESSION_ENDED).setPackage(packageName))
+        } catch (_: Exception) {}
+    }
+
+    /** Android 13+ requires an explicit runtime grant for notifications. */
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        try {
+            requestPermissions(
+                arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                REQUEST_POST_NOTIFICATIONS
+            )
+        } catch (_: Exception) {
+            // If the activity is not in a state where it can ask, the user can
+            // still enable notifications from system settings later.
         }
     }
 
@@ -150,6 +223,24 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
+                "isIgnoringBatteryOptimizations" ->
+                    result.success(isIgnoringBatteryOptimizations())
+                "requestIgnoreBatteryOptimizations" -> {
+                    requestIgnoreBatteryOptimizations()
+                    result.success(null)
+                }
+                "getActiveSession" -> {
+                    val prefs = getSharedPreferences("focusflow_session", Context.MODE_PRIVATE)
+                    result.success(
+                        mapOf(
+                            "active" to prefs.getBoolean("active", false),
+                            "sessionId" to prefs.getString("session_id", null),
+                            "endTimeMillis" to prefs.getLong("end_time", 0L),
+                            "totalSeconds" to prefs.getInt("total_seconds", 0),
+                            "endedExternally" to prefs.getBoolean("ended_externally", false)
+                        )
+                    )
+                }
                 "startSession" -> {
                     val sessionId = call.argument<String>("sessionId")!!
                     val endTimeMillis = call.argument<Long>("endTimeMillis")!!
@@ -159,9 +250,25 @@ class MainActivity : FlutterActivity() {
                     startSessionInternal(sessionId, endTimeMillis, totalSeconds, whitelistJson)
                     result.success(null)
                 }
+                "completeSession" -> {
+                    completeSessionInternal(call.argument<String>("sessionId"))
+                    result.success(null)
+                }
+                "requestNotificationPermission" -> {
+                    requestNotificationPermission()
+                    result.success(null)
+                }
                 "endSession" -> {
                     val prefs = getSharedPreferences("focusflow_session", Context.MODE_PRIVATE)
-                    prefs.edit().putBoolean("active", false).apply()
+                    // Clear everything session-specific: a finished session
+                    // must never be "restored" on the next app launch.
+                    prefs.edit()
+                        .putBoolean("active", false)
+                        .putBoolean("ended_externally", false)
+                        .remove("session_id")
+                        .remove("end_time")
+                        .remove("total_seconds")
+                        .apply()
 
                     stopService(Intent(this, FocusForegroundService::class.java))
 
@@ -272,6 +379,33 @@ class MainActivity : FlutterActivity() {
         val outputStream = ByteArrayOutputStream()
         scaled.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
         return Base64.encodeToString(outputStream.toByteArray(), Base64.NO_WRAP)
+    }
+
+    private fun isIgnoringBatteryOptimizations(): Boolean {
+        return try {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            powerManager.isIgnoringBatteryOptimizations(packageName)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun requestIgnoreBatteryOptimizations() {
+        if (isIgnoringBatteryOptimizations()) return
+        try {
+            startActivity(
+                Intent(
+                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } catch (_: Exception) {
+            // Some OEMs do not implement the direct request dialog; open the
+            // battery optimization list instead.
+            try {
+                startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+            } catch (_: Exception) {}
+        }
     }
 
     private fun isUsageAccessGranted(): Boolean {

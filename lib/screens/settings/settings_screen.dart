@@ -140,6 +140,24 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   onTap: () => BlockerPlatform.openOverlaySettings(),
                 ),
+                ListTile(
+                  leading: const Icon(Icons.battery_saver),
+                  title: const Text('Run in the background'),
+                  subtitle:
+                      const Text('Stops battery saver from ending a session'),
+                  trailing: FutureBuilder(
+                    future: BlockerPlatform.isIgnoringBatteryOptimizations(),
+                    builder: (context, snapshot) => Icon(
+                      snapshot.data == true
+                          ? Icons.check_circle
+                          : Icons.error,
+                      color:
+                          snapshot.data == true ? Colors.green : Colors.red,
+                    ),
+                  ),
+                  onTap: () =>
+                      BlockerPlatform.requestIgnoreBatteryOptimizations(),
+                ),
               ],
             ),
           ),

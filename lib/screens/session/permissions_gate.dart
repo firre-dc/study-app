@@ -15,6 +15,7 @@ class _PermissionsGateState extends State<PermissionsGate>
   bool _usageAccessGranted = false;
   bool _overlayEnabled = false;
   bool _checking = true;
+  bool _checkInProgress = false;
 
   @override
   void initState() {
@@ -35,14 +36,22 @@ class _PermissionsGateState extends State<PermissionsGate>
   }
 
   Future<void> _check() async {
-    final usageAccess = await BlockerPlatform.isUsageAccessGranted();
-    final overlay = await BlockerPlatform.canDrawOverlays();
-    if (mounted) {
-      setState(() {
-        _usageAccessGranted = usageAccess;
-        _overlayEnabled = overlay;
-        _checking = false;
-      });
+    if (_checkInProgress) return;
+    _checkInProgress = true;
+    try {
+      final results = await Future.wait([
+        BlockerPlatform.isUsageAccessGranted(),
+        BlockerPlatform.canDrawOverlays(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _usageAccessGranted = results[0];
+          _overlayEnabled = results[1];
+          _checking = false;
+        });
+      }
+    } finally {
+      _checkInProgress = false;
     }
   }
 

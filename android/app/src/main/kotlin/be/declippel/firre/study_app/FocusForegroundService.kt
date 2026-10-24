@@ -130,6 +130,7 @@ class FocusForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        SessionNotifications.createCompletionChannel(this)
         registerSessionEndedReceiver()
     }
 
@@ -161,6 +162,22 @@ class FocusForegroundService : Service() {
             Log.d(TAG, "tick: active=$active now>=endTime=${System.currentTimeMillis() >= endTime}")
 
             if (!active || System.currentTimeMillis() >= endTime) {
+                if (active && System.currentTimeMillis() >= endTime) {
+                    // Finish the session natively. The completion alert is
+                    // posted here so it still fires when Flutter is frozen or
+                    // dead. Clearing the session id keeps a completed session
+                    // from being "restored" on the next app launch.
+                    SessionNotifications.notifySessionComplete(
+                        this@FocusForegroundService
+                    )
+                    prefs.edit()
+                        .putBoolean("active", false)
+                        .putBoolean("ended_externally", false)
+                        .remove("session_id")
+                        .remove("end_time")
+                        .remove("total_seconds")
+                        .apply()
+                }
                 hideOverlay()
                 stopSelf()
                 return
@@ -396,8 +413,14 @@ class FocusForegroundService : Service() {
     }
 
     private fun endSessionFromOverlay() {
+        // Keep the session id/end time: if the Flutter process is not alive
+        // (e.g. killed by a battery saver), the next app launch can still
+        // finalize this session as ended early and show the survey.
         getSharedPreferences("focusflow_session", Context.MODE_PRIVATE)
-            .edit().putBoolean("active", false).apply()
+            .edit()
+            .putBoolean("active", false)
+            .putBoolean("ended_externally", true)
+            .apply()
         hideOverlay()
         try {
             stopSelf()

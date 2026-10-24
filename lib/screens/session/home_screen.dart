@@ -1,15 +1,76 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:study_app/controllers/session_controller.dart';
 import 'package:study_app/screens/session/permissions_gate.dart';
 import 'package:study_app/screens/session/session_screen.dart';
+import 'package:study_app/services/blocker_platform.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
+  bool _restoring = true;
+  bool _ignoringBatteryOptimizations = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreSession();
+      _checkBatteryOptimizations();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkBatteryOptimizations();
+    }
+  }
+
+  /// The Flutter process may have been killed by battery saver/OEM power
+  /// management while the native foreground service kept the session alive.
+  /// Pick that session back up instead of silently losing it.
+  Future<void> _restoreSession() async {
+    final result =
+        await ref.read(sessionControllerProvider.notifier).restoreActiveSession();
+    if (!mounted) return;
+    setState(() => _restoring = false);
+    if (result == SessionRestoreResult.active) {
+      context.go('/session');
+    } else if (result == SessionRestoreResult.ended) {
+      context.go('/survey');
+    }
+  }
+
+  Future<void> _checkBatteryOptimizations() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final ignoring = await BlockerPlatform.isIgnoringBatteryOptimizations();
+    if (mounted && ignoring != _ignoringBatteryOptimizations) {
+      setState(() => _ignoringBatteryOptimizations = ignoring);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_restoring) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     final sessionState = ref.watch(sessionControllerProvider);
 
     return Scaffold(
@@ -22,11 +83,17 @@ class HomeScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final minHeight =
+              constraints.maxHeight > 48 ? constraints.maxHeight - 48 : 0.0;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: minHeight),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
             Text(
               'Ready to focus?',
               style: Theme.of(context).textTheme.headlineMedium,
@@ -42,6 +109,12 @@ class HomeScreen extends ConsumerWidget {
               onChanged: (v) =>
                   ref.read(sessionControllerProvider.notifier).setDurationMinutes(v),
             ),
+            if (!_ignoringBatteryOptimizations) ...[
+              const SizedBox(height: 24),
+              _BatteryWarningCard(
+                onAllow: () => BlockerPlatform.requestIgnoreBatteryOptimizations(),
+              ),
+            ],
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: () {
@@ -64,6 +137,56 @@ class HomeScreen extends ConsumerWidget {
               onPressed: () => context.go('/dashboard'),
               icon: const Icon(Icons.insights),
               label: const Text('View Dashboard'),
+            ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _BatteryWarningCard extends StatelessWidget {
+  const _BatteryWarningCard({required this.onAllow});
+
+  final VoidCallback onAllow;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      color: colorScheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.battery_alert, color: colorScheme.onErrorContainer),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Battery saver can stop your session',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: colorScheme.onErrorContainer,
+                        ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Allow FocusFlow to run in the background so the timer and app '
+              'blocking keep working when the screen is off.',
+              style: TextStyle(color: colorScheme.onErrorContainer),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.tonal(
+              onPressed: onAllow,
+              child: const Text('Allow background activity'),
             ),
           ],
         ),

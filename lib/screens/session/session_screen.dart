@@ -21,9 +21,19 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   }
 
   Future<void> _startIfNeeded() async {
+    if (!mounted) return;
     final state = ref.read(sessionControllerProvider);
-    if (state.state == SessionState.idle) {
+    if (state.state == SessionState.active) return;
+
+    try {
+      // startSession enters the active state synchronously, before any
+      // database or platform-channel work, so the countdown always appears.
       await ref.read(sessionControllerProvider.notifier).startSession();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not start the session: $error')),
+      );
     }
   }
 
@@ -72,8 +82,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                         CircularProgressIndicator(
                           value: progress,
                           strokeWidth: 12,
-                          backgroundColor:
-                              Theme.of(context).colorScheme.surfaceContainerHighest,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
                         ),
                         Center(
                           child: Column(
@@ -81,12 +92,10 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                             children: [
                               Text(
                                 formatDuration(remaining),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .displayMedium
+                                style: Theme.of(context).textTheme.displayMedium
                                     ?.copyWith(
                                       fontFeatures: const [
-                                        FontFeature.tabularFigures()
+                                        FontFeature.tabularFigures(),
                                       ],
                                     ),
                               ),
@@ -110,7 +119,9 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                   const SizedBox(height: 32),
                   TextButton(
                     onPressed: () async {
-                      await ref.read(sessionControllerProvider.notifier).endEarly();
+                      await ref
+                          .read(sessionControllerProvider.notifier)
+                          .endEarly();
                       if (context.mounted) context.go('/survey');
                     },
                     style: TextButton.styleFrom(foregroundColor: Colors.orange),
