@@ -9,6 +9,7 @@ import 'package:study_app/screens/onboarding/profile_screen.dart';
 import 'package:study_app/screens/onboarding/welcome_screen.dart';
 import 'package:study_app/screens/onboarding/whitelist_screen.dart';
 import 'package:study_app/screens/session/home_screen.dart';
+import 'package:study_app/screens/session/permissions_gate.dart';
 import 'package:study_app/screens/session/session_screen.dart';
 import 'package:study_app/screens/session/survey_screen.dart';
 import 'package:study_app/screens/settings/settings_screen.dart';
@@ -47,7 +48,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/',
         builder: (context, state) => const HomeScreen(),
         routes: [
-          GoRoute(path: 'session', builder: (context, state) => const SessionScreen()),
+          GoRoute(
+            path: 'session',
+            builder: (context, state) =>
+                const PermissionsGate(child: SessionScreen()),
+          ),
           GoRoute(path: 'survey', builder: (context, state) => const SurveyScreen()),
           GoRoute(path: 'dashboard', builder: (context, state) => const DashboardScreen()),
           GoRoute(path: 'settings', builder: (context, state) => const SettingsScreen(), routes: [

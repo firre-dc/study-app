@@ -1729,6 +1729,47 @@ class $SessionFeedbacksTable extends SessionFeedbacks
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _qDistractedByOthersMeta =
+      const VerificationMeta('qDistractedByOthers');
+  @override
+  late final GeneratedColumn<bool> qDistractedByOthers = GeneratedColumn<bool>(
+    'q_distracted_by_others',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("q_distracted_by_others" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _qConsumedCaffeineMeta = const VerificationMeta(
+    'qConsumedCaffeine',
+  );
+  @override
+  late final GeneratedColumn<bool> qConsumedCaffeine = GeneratedColumn<bool>(
+    'q_consumed_caffeine',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("q_consumed_caffeine" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _qListenedToMusicMeta = const VerificationMeta(
+    'qListenedToMusic',
+  );
+  @override
+  late final GeneratedColumn<bool> qListenedToMusic = GeneratedColumn<bool>(
+    'q_listened_to_music',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("q_listened_to_music" IN (0, 1))',
+    ),
+  );
   static const VerificationMeta _submittedAtMeta = const VerificationMeta(
     'submittedAt',
   );
@@ -1753,6 +1794,9 @@ class $SessionFeedbacksTable extends SessionFeedbacks
     qUsedAppsJson,
     qSatisfaction,
     notes,
+    qDistractedByOthers,
+    qConsumedCaffeine,
+    qListenedToMusic,
     submittedAt,
   ];
   @override
@@ -1867,6 +1911,33 @@ class $SessionFeedbacksTable extends SessionFeedbacks
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('q_distracted_by_others')) {
+      context.handle(
+        _qDistractedByOthersMeta,
+        qDistractedByOthers.isAcceptableOrUnknown(
+          data['q_distracted_by_others']!,
+          _qDistractedByOthersMeta,
+        ),
+      );
+    }
+    if (data.containsKey('q_consumed_caffeine')) {
+      context.handle(
+        _qConsumedCaffeineMeta,
+        qConsumedCaffeine.isAcceptableOrUnknown(
+          data['q_consumed_caffeine']!,
+          _qConsumedCaffeineMeta,
+        ),
+      );
+    }
+    if (data.containsKey('q_listened_to_music')) {
+      context.handle(
+        _qListenedToMusicMeta,
+        qListenedToMusic.isAcceptableOrUnknown(
+          data['q_listened_to_music']!,
+          _qListenedToMusicMeta,
+        ),
+      );
+    }
     if (data.containsKey('submitted_at')) {
       context.handle(
         _submittedAtMeta,
@@ -1931,6 +2002,18 @@ class $SessionFeedbacksTable extends SessionFeedbacks
         DriftSqlType.string,
         data['${effectivePrefix}notes'],
       ),
+      qDistractedByOthers: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}q_distracted_by_others'],
+      ),
+      qConsumedCaffeine: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}q_consumed_caffeine'],
+      ),
+      qListenedToMusic: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}q_listened_to_music'],
+      ),
       submittedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}submitted_at'],
@@ -1956,6 +2039,9 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
   final String? qUsedAppsJson;
   final int qSatisfaction;
   final String? notes;
+  final bool? qDistractedByOthers;
+  final bool? qConsumedCaffeine;
+  final bool? qListenedToMusic;
   final int submittedAt;
   const SessionFeedback({
     required this.id,
@@ -1969,6 +2055,9 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
     this.qUsedAppsJson,
     required this.qSatisfaction,
     this.notes,
+    this.qDistractedByOthers,
+    this.qConsumedCaffeine,
+    this.qListenedToMusic,
     required this.submittedAt,
   });
   @override
@@ -1988,6 +2077,15 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
     map['q_satisfaction'] = Variable<int>(qSatisfaction);
     if (!nullToAbsent || notes != null) {
       map['notes'] = Variable<String>(notes);
+    }
+    if (!nullToAbsent || qDistractedByOthers != null) {
+      map['q_distracted_by_others'] = Variable<bool>(qDistractedByOthers);
+    }
+    if (!nullToAbsent || qConsumedCaffeine != null) {
+      map['q_consumed_caffeine'] = Variable<bool>(qConsumedCaffeine);
+    }
+    if (!nullToAbsent || qListenedToMusic != null) {
+      map['q_listened_to_music'] = Variable<bool>(qListenedToMusic);
     }
     map['submitted_at'] = Variable<int>(submittedAt);
     return map;
@@ -2010,6 +2108,15 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
       notes: notes == null && nullToAbsent
           ? const Value.absent()
           : Value(notes),
+      qDistractedByOthers: qDistractedByOthers == null && nullToAbsent
+          ? const Value.absent()
+          : Value(qDistractedByOthers),
+      qConsumedCaffeine: qConsumedCaffeine == null && nullToAbsent
+          ? const Value.absent()
+          : Value(qConsumedCaffeine),
+      qListenedToMusic: qListenedToMusic == null && nullToAbsent
+          ? const Value.absent()
+          : Value(qListenedToMusic),
       submittedAt: Value(submittedAt),
     );
   }
@@ -2031,6 +2138,11 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
       qUsedAppsJson: serializer.fromJson<String?>(json['qUsedAppsJson']),
       qSatisfaction: serializer.fromJson<int>(json['qSatisfaction']),
       notes: serializer.fromJson<String?>(json['notes']),
+      qDistractedByOthers: serializer.fromJson<bool?>(
+        json['qDistractedByOthers'],
+      ),
+      qConsumedCaffeine: serializer.fromJson<bool?>(json['qConsumedCaffeine']),
+      qListenedToMusic: serializer.fromJson<bool?>(json['qListenedToMusic']),
       submittedAt: serializer.fromJson<int>(json['submittedAt']),
     );
   }
@@ -2049,6 +2161,9 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
       'qUsedAppsJson': serializer.toJson<String?>(qUsedAppsJson),
       'qSatisfaction': serializer.toJson<int>(qSatisfaction),
       'notes': serializer.toJson<String?>(notes),
+      'qDistractedByOthers': serializer.toJson<bool?>(qDistractedByOthers),
+      'qConsumedCaffeine': serializer.toJson<bool?>(qConsumedCaffeine),
+      'qListenedToMusic': serializer.toJson<bool?>(qListenedToMusic),
       'submittedAt': serializer.toJson<int>(submittedAt),
     };
   }
@@ -2065,6 +2180,9 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
     Value<String?> qUsedAppsJson = const Value.absent(),
     int? qSatisfaction,
     Value<String?> notes = const Value.absent(),
+    Value<bool?> qDistractedByOthers = const Value.absent(),
+    Value<bool?> qConsumedCaffeine = const Value.absent(),
+    Value<bool?> qListenedToMusic = const Value.absent(),
     int? submittedAt,
   }) => SessionFeedback(
     id: id ?? this.id,
@@ -2080,6 +2198,15 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
         : this.qUsedAppsJson,
     qSatisfaction: qSatisfaction ?? this.qSatisfaction,
     notes: notes.present ? notes.value : this.notes,
+    qDistractedByOthers: qDistractedByOthers.present
+        ? qDistractedByOthers.value
+        : this.qDistractedByOthers,
+    qConsumedCaffeine: qConsumedCaffeine.present
+        ? qConsumedCaffeine.value
+        : this.qConsumedCaffeine,
+    qListenedToMusic: qListenedToMusic.present
+        ? qListenedToMusic.value
+        : this.qListenedToMusic,
     submittedAt: submittedAt ?? this.submittedAt,
   );
   SessionFeedback copyWithCompanion(SessionFeedbacksCompanion data) {
@@ -2109,6 +2236,15 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
           ? data.qSatisfaction.value
           : this.qSatisfaction,
       notes: data.notes.present ? data.notes.value : this.notes,
+      qDistractedByOthers: data.qDistractedByOthers.present
+          ? data.qDistractedByOthers.value
+          : this.qDistractedByOthers,
+      qConsumedCaffeine: data.qConsumedCaffeine.present
+          ? data.qConsumedCaffeine.value
+          : this.qConsumedCaffeine,
+      qListenedToMusic: data.qListenedToMusic.present
+          ? data.qListenedToMusic.value
+          : this.qListenedToMusic,
       submittedAt: data.submittedAt.present
           ? data.submittedAt.value
           : this.submittedAt,
@@ -2129,6 +2265,9 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
           ..write('qUsedAppsJson: $qUsedAppsJson, ')
           ..write('qSatisfaction: $qSatisfaction, ')
           ..write('notes: $notes, ')
+          ..write('qDistractedByOthers: $qDistractedByOthers, ')
+          ..write('qConsumedCaffeine: $qConsumedCaffeine, ')
+          ..write('qListenedToMusic: $qListenedToMusic, ')
           ..write('submittedAt: $submittedAt')
           ..write(')'))
         .toString();
@@ -2147,6 +2286,9 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
     qUsedAppsJson,
     qSatisfaction,
     notes,
+    qDistractedByOthers,
+    qConsumedCaffeine,
+    qListenedToMusic,
     submittedAt,
   );
   @override
@@ -2164,6 +2306,9 @@ class SessionFeedback extends DataClass implements Insertable<SessionFeedback> {
           other.qUsedAppsJson == this.qUsedAppsJson &&
           other.qSatisfaction == this.qSatisfaction &&
           other.notes == this.notes &&
+          other.qDistractedByOthers == this.qDistractedByOthers &&
+          other.qConsumedCaffeine == this.qConsumedCaffeine &&
+          other.qListenedToMusic == this.qListenedToMusic &&
           other.submittedAt == this.submittedAt);
 }
 
@@ -2179,6 +2324,9 @@ class SessionFeedbacksCompanion extends UpdateCompanion<SessionFeedback> {
   final Value<String?> qUsedAppsJson;
   final Value<int> qSatisfaction;
   final Value<String?> notes;
+  final Value<bool?> qDistractedByOthers;
+  final Value<bool?> qConsumedCaffeine;
+  final Value<bool?> qListenedToMusic;
   final Value<int> submittedAt;
   final Value<int> rowid;
   const SessionFeedbacksCompanion({
@@ -2193,6 +2341,9 @@ class SessionFeedbacksCompanion extends UpdateCompanion<SessionFeedback> {
     this.qUsedAppsJson = const Value.absent(),
     this.qSatisfaction = const Value.absent(),
     this.notes = const Value.absent(),
+    this.qDistractedByOthers = const Value.absent(),
+    this.qConsumedCaffeine = const Value.absent(),
+    this.qListenedToMusic = const Value.absent(),
     this.submittedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -2208,6 +2359,9 @@ class SessionFeedbacksCompanion extends UpdateCompanion<SessionFeedback> {
     this.qUsedAppsJson = const Value.absent(),
     required int qSatisfaction,
     this.notes = const Value.absent(),
+    this.qDistractedByOthers = const Value.absent(),
+    this.qConsumedCaffeine = const Value.absent(),
+    this.qListenedToMusic = const Value.absent(),
     required int submittedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -2231,6 +2385,9 @@ class SessionFeedbacksCompanion extends UpdateCompanion<SessionFeedback> {
     Expression<String>? qUsedAppsJson,
     Expression<int>? qSatisfaction,
     Expression<String>? notes,
+    Expression<bool>? qDistractedByOthers,
+    Expression<bool>? qConsumedCaffeine,
+    Expression<bool>? qListenedToMusic,
     Expression<int>? submittedAt,
     Expression<int>? rowid,
   }) {
@@ -2246,6 +2403,10 @@ class SessionFeedbacksCompanion extends UpdateCompanion<SessionFeedback> {
       if (qUsedAppsJson != null) 'q_used_apps_json': qUsedAppsJson,
       if (qSatisfaction != null) 'q_satisfaction': qSatisfaction,
       if (notes != null) 'notes': notes,
+      if (qDistractedByOthers != null)
+        'q_distracted_by_others': qDistractedByOthers,
+      if (qConsumedCaffeine != null) 'q_consumed_caffeine': qConsumedCaffeine,
+      if (qListenedToMusic != null) 'q_listened_to_music': qListenedToMusic,
       if (submittedAt != null) 'submitted_at': submittedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -2263,6 +2424,9 @@ class SessionFeedbacksCompanion extends UpdateCompanion<SessionFeedback> {
     Value<String?>? qUsedAppsJson,
     Value<int>? qSatisfaction,
     Value<String?>? notes,
+    Value<bool?>? qDistractedByOthers,
+    Value<bool?>? qConsumedCaffeine,
+    Value<bool?>? qListenedToMusic,
     Value<int>? submittedAt,
     Value<int>? rowid,
   }) {
@@ -2278,6 +2442,9 @@ class SessionFeedbacksCompanion extends UpdateCompanion<SessionFeedback> {
       qUsedAppsJson: qUsedAppsJson ?? this.qUsedAppsJson,
       qSatisfaction: qSatisfaction ?? this.qSatisfaction,
       notes: notes ?? this.notes,
+      qDistractedByOthers: qDistractedByOthers ?? this.qDistractedByOthers,
+      qConsumedCaffeine: qConsumedCaffeine ?? this.qConsumedCaffeine,
+      qListenedToMusic: qListenedToMusic ?? this.qListenedToMusic,
       submittedAt: submittedAt ?? this.submittedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -2319,6 +2486,15 @@ class SessionFeedbacksCompanion extends UpdateCompanion<SessionFeedback> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (qDistractedByOthers.present) {
+      map['q_distracted_by_others'] = Variable<bool>(qDistractedByOthers.value);
+    }
+    if (qConsumedCaffeine.present) {
+      map['q_consumed_caffeine'] = Variable<bool>(qConsumedCaffeine.value);
+    }
+    if (qListenedToMusic.present) {
+      map['q_listened_to_music'] = Variable<bool>(qListenedToMusic.value);
+    }
     if (submittedAt.present) {
       map['submitted_at'] = Variable<int>(submittedAt.value);
     }
@@ -2342,6 +2518,9 @@ class SessionFeedbacksCompanion extends UpdateCompanion<SessionFeedback> {
           ..write('qUsedAppsJson: $qUsedAppsJson, ')
           ..write('qSatisfaction: $qSatisfaction, ')
           ..write('notes: $notes, ')
+          ..write('qDistractedByOthers: $qDistractedByOthers, ')
+          ..write('qConsumedCaffeine: $qConsumedCaffeine, ')
+          ..write('qListenedToMusic: $qListenedToMusic, ')
           ..write('submittedAt: $submittedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3784,6 +3963,9 @@ typedef $$SessionFeedbacksTableCreateCompanionBuilder =
       Value<String?> qUsedAppsJson,
       required int qSatisfaction,
       Value<String?> notes,
+      Value<bool?> qDistractedByOthers,
+      Value<bool?> qConsumedCaffeine,
+      Value<bool?> qListenedToMusic,
       required int submittedAt,
       Value<int> rowid,
     });
@@ -3800,6 +3982,9 @@ typedef $$SessionFeedbacksTableUpdateCompanionBuilder =
       Value<String?> qUsedAppsJson,
       Value<int> qSatisfaction,
       Value<String?> notes,
+      Value<bool?> qDistractedByOthers,
+      Value<bool?> qConsumedCaffeine,
+      Value<bool?> qListenedToMusic,
       Value<int> submittedAt,
       Value<int> rowid,
     });
@@ -3895,6 +4080,21 @@ class $$SessionFeedbacksTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<bool> get qDistractedByOthers => $composableBuilder(
+    column: $table.qDistractedByOthers,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get qConsumedCaffeine => $composableBuilder(
+    column: $table.qConsumedCaffeine,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get qListenedToMusic => $composableBuilder(
+    column: $table.qListenedToMusic,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get submittedAt => $composableBuilder(
     column: $table.submittedAt,
     builder: (column) => ColumnFilters(column),
@@ -3983,6 +4183,21 @@ class $$SessionFeedbacksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get qDistractedByOthers => $composableBuilder(
+    column: $table.qDistractedByOthers,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get qConsumedCaffeine => $composableBuilder(
+    column: $table.qConsumedCaffeine,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get qListenedToMusic => $composableBuilder(
+    column: $table.qListenedToMusic,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get submittedAt => $composableBuilder(
     column: $table.submittedAt,
     builder: (column) => ColumnOrderings(column),
@@ -4065,6 +4280,21 @@ class $$SessionFeedbacksTableAnnotationComposer
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
+  GeneratedColumn<bool> get qDistractedByOthers => $composableBuilder(
+    column: $table.qDistractedByOthers,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get qConsumedCaffeine => $composableBuilder(
+    column: $table.qConsumedCaffeine,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get qListenedToMusic => $composableBuilder(
+    column: $table.qListenedToMusic,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get submittedAt => $composableBuilder(
     column: $table.submittedAt,
     builder: (column) => column,
@@ -4135,6 +4365,9 @@ class $$SessionFeedbacksTableTableManager
                 Value<String?> qUsedAppsJson = const Value.absent(),
                 Value<int> qSatisfaction = const Value.absent(),
                 Value<String?> notes = const Value.absent(),
+                Value<bool?> qDistractedByOthers = const Value.absent(),
+                Value<bool?> qConsumedCaffeine = const Value.absent(),
+                Value<bool?> qListenedToMusic = const Value.absent(),
                 Value<int> submittedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SessionFeedbacksCompanion(
@@ -4149,6 +4382,9 @@ class $$SessionFeedbacksTableTableManager
                 qUsedAppsJson: qUsedAppsJson,
                 qSatisfaction: qSatisfaction,
                 notes: notes,
+                qDistractedByOthers: qDistractedByOthers,
+                qConsumedCaffeine: qConsumedCaffeine,
+                qListenedToMusic: qListenedToMusic,
                 submittedAt: submittedAt,
                 rowid: rowid,
               ),
@@ -4165,6 +4401,9 @@ class $$SessionFeedbacksTableTableManager
                 Value<String?> qUsedAppsJson = const Value.absent(),
                 required int qSatisfaction,
                 Value<String?> notes = const Value.absent(),
+                Value<bool?> qDistractedByOthers = const Value.absent(),
+                Value<bool?> qConsumedCaffeine = const Value.absent(),
+                Value<bool?> qListenedToMusic = const Value.absent(),
                 required int submittedAt,
                 Value<int> rowid = const Value.absent(),
               }) => SessionFeedbacksCompanion.insert(
@@ -4179,6 +4418,9 @@ class $$SessionFeedbacksTableTableManager
                 qUsedAppsJson: qUsedAppsJson,
                 qSatisfaction: qSatisfaction,
                 notes: notes,
+                qDistractedByOthers: qDistractedByOthers,
+                qConsumedCaffeine: qConsumedCaffeine,
+                qListenedToMusic: qListenedToMusic,
                 submittedAt: submittedAt,
                 rowid: rowid,
               ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:study_app/controllers/session_controller.dart';
 import 'package:study_app/providers.dart';
+import 'package:study_app/repositories/feedback_repository.dart';
 import 'package:study_app/utils/time_utils.dart';
 
 class SurveyScreen extends ConsumerStatefulWidget {
@@ -13,64 +14,77 @@ class SurveyScreen extends ConsumerStatefulWidget {
 }
 
 class _SurveyScreenState extends ConsumerState<SurveyScreen> {
+  bool? _distractedByOthers;
+  bool? _consumedCaffeine;
+  bool? _listenedToMusic;
   int? _productivity;
-  int? _focus;
-  int? _mentalTired;
-  int? _physicalEnergy;
-  int? _distracted;
-  bool? _usedWhitelisted;
-  final Set<String> _usedApps = {};
-  int? _satisfaction;
-  final _notesController = TextEditingController();
   bool _saving = false;
 
-  @override
-  void dispose() {
-    _notesController.dispose();
-    super.dispose();
-  }
-
   bool get _canSubmit =>
-      _productivity != null &&
-      _focus != null &&
-      _mentalTired != null &&
-      _physicalEnergy != null &&
-      _distracted != null &&
-      _usedWhitelisted != null &&
-      (_usedWhitelisted != true || _usedApps.isNotEmpty) &&
-      _satisfaction != null;
+      _distractedByOthers != null &&
+      _consumedCaffeine != null &&
+      _listenedToMusic != null &&
+      _productivity != null;
 
   Future<void> _submit() async {
+    // The button is disabled while saving, but guard here too so a double
+    // tap can never write two feedback rows.
+    if (_saving || !_canSubmit) return;
+
+    final sessionController = ref.read(sessionControllerProvider.notifier);
     final sessionId = ref.read(sessionControllerProvider).sessionId;
-    if (sessionId == null) return;
-    setState(() => _saving = true);
-    await ref.read(feedbackRepositoryProvider).saveFeedback(
-          sessionId: sessionId,
-          qProductivity: _productivity!,
-          qFocus: _focus!,
-          qMentalTired: _mentalTired!,
-          qPhysicalEnergy: _physicalEnergy!,
-          qDistracted: _distracted!,
-          qUsedWhitelisted: _usedWhitelisted!,
-          qUsedApps: _usedWhitelisted == true ? _usedApps.toList() : [],
-          qSatisfaction: _satisfaction!,
-          notes: _notesController.text.trim().isEmpty
-              ? null
-              : _notesController.text.trim(),
-        );
-    ref.read(sessionControllerProvider.notifier).reset();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Session saved. Nice work!')),
-      );
-      context.go('/');
+    if (sessionId == null) {
+      // There is no session left to attach feedback to. Never trap the user
+      // on this screen because of a stale/cleared controller state.
+      if (mounted) context.go('/');
+      return;
     }
+
+    final feedbackRepository = ref.read(feedbackRepositoryProvider);
+
+    setState(() => _saving = true);
+    try {
+      // The survey stores the yes/no answers through the existing feedback
+      // fields; the repository also copies them to their dedicated columns.
+      await feedbackRepository.saveFeedback(
+        sessionId: sessionId,
+        qProductivity: _productivity!,
+        qFocus: _productivity!,
+        qMentalTired: 5,
+        qPhysicalEnergy: _consumedCaffeine! ? 10 : 1,
+        qDistracted: _distractedByOthers! ? 10 : 1,
+        qUsedWhitelisted: false,
+        qUsedApps: _listenedToMusic!
+            ? const [FeedbackRepository.musicAnswerMarker]
+            : const [],
+        qSatisfaction: _productivity!,
+      );
+    } catch (_) {
+      // Keep the answers on screen so the user can retry instead of leaving
+      // them with a button that spins forever.
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not save your feedback. Please try again.'),
+        ),
+      );
+      return;
+    }
+
+    // Capture the controller before the await above, so a route change
+    // during saving can never make this a read from a disposed widget.
+    sessionController.reset();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Session saved. Nice work!')),
+    );
+    context.go('/');
   }
 
   @override
   Widget build(BuildContext context) {
     final sessionState = ref.watch(sessionControllerProvider);
-    final whitelist = ref.watch(whitelistProvider).value ?? [];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Session Feedback')),
@@ -81,84 +95,33 @@ class _SurveyScreenState extends ConsumerState<SurveyScreen> {
           children: [
             _SessionSummary(sessionState: sessionState),
             const SizedBox(height: 24),
+            _YesNoQuestion(
+              title: 'Were you distracted by others?',
+              value: _distractedByOthers,
+              onChanged: (v) => setState(() => _distractedByOthers = v),
+            ),
+            const SizedBox(height: 24),
+            _YesNoQuestion(
+              title:
+                  'Did you consume any caffeine before/during this session?',
+              value: _consumedCaffeine,
+              onChanged: (v) => setState(() => _consumedCaffeine = v),
+            ),
+            const SizedBox(height: 24),
+            _YesNoQuestion(
+              title: 'Did you listen to music?',
+              value: _listenedToMusic,
+              onChanged: (v) => setState(() => _listenedToMusic = v),
+            ),
+            const SizedBox(height: 24),
             _RatingQuestion(
-              title: 'How productive were you?',
+              title: 'How productive was this session?',
+              lowLabel: 'Not at all productive',
+              highLabel: 'Extremely productive',
               value: _productivity,
               onChanged: (v) => setState(() => _productivity = v),
             ),
-            _RatingQuestion(
-              title: 'How focused were you?',
-              value: _focus,
-              onChanged: (v) => setState(() => _focus = v),
-            ),
-            _RatingQuestion(
-              title: 'How mentally tired were you?',
-              lowLabel: 'Very fresh',
-              highLabel: 'Very tired',
-              value: _mentalTired,
-              onChanged: (v) => setState(() => _mentalTired = v),
-            ),
-            _RatingQuestion(
-              title: 'How physically energized were you?',
-              lowLabel: 'Very low',
-              highLabel: 'Very high',
-              value: _physicalEnergy,
-              onChanged: (v) => setState(() => _physicalEnergy = v),
-            ),
-            _RatingQuestion(
-              title: 'How distracted were you?',
-              lowLabel: 'Not at all',
-              highLabel: 'Extremely',
-              value: _distracted,
-              onChanged: (v) => setState(() => _distracted = v),
-            ),
-            _YesNoQuestion(
-              title: 'Did you use any of your whitelisted apps during this session?',
-              value: _usedWhitelisted,
-              onChanged: (v) => setState(() {
-                _usedWhitelisted = v;
-                if (v != true) _usedApps.clear();
-              }),
-            ),
-            if (_usedWhitelisted == true) ...[
-              const SizedBox(height: 8),
-              Text('Which ones?', style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                children: whitelist.map((app) {
-                  return FilterChip(
-                    label: Text(app.appName),
-                    selected: _usedApps.contains(app.packageName),
-                    onSelected: (_) {
-                      setState(() {
-                        if (_usedApps.contains(app.packageName)) {
-                          _usedApps.remove(app.packageName);
-                        } else {
-                          _usedApps.add(app.packageName);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-            ],
-            const SizedBox(height: 24),
-            _RatingQuestion(
-              title: 'Overall satisfaction with this session',
-              value: _satisfaction,
-              onChanged: (v) => setState(() => _satisfaction = v),
-            ),
-            const SizedBox(height: 24),
-            TextField(
-              controller: _notesController,
-              decoration: const InputDecoration(
-                labelText: 'Notes (optional)',
-                border: OutlineInputBorder(),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: FilledButton(

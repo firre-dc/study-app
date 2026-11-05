@@ -60,6 +60,9 @@ class SessionFeedbacks extends Table {
   TextColumn get qUsedAppsJson => text().nullable()(); // JSON array of package names
   IntColumn get qSatisfaction => integer()(); // 1-10
   TextColumn get notes => text().nullable()();
+  BoolColumn get qDistractedByOthers => boolean().nullable()();
+  BoolColumn get qConsumedCaffeine => boolean().nullable()();
+  BoolColumn get qListenedToMusic => boolean().nullable()();
   IntColumn get submittedAt => integer()();
 
   @override
@@ -90,7 +93,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(

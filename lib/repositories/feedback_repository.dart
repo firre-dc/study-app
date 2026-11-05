@@ -10,6 +10,9 @@ class FeedbackRepository {
 
   static const _uuid = Uuid();
 
+  /// Marker stored in [qUsedAppsJson] when music was played during a session.
+  static const musicAnswerMarker = 'music';
+
   Future<void> saveFeedback({
     required String sessionId,
     required int qProductivity,
@@ -34,6 +37,12 @@ class FeedbackRepository {
       qUsedAppsJson: Value(qUsedApps.isEmpty ? null : jsonEncode(qUsedApps)),
       qSatisfaction: qSatisfaction,
       notes: Value(notes),
+      // Store the current yes/no questions in dedicated columns as well. They
+      // are encoded through the legacy parameters so older callers keep using
+      // the same saveFeedback signature.
+      qDistractedByOthers: Value(qDistracted > 5),
+      qConsumedCaffeine: Value(qPhysicalEnergy > 5),
+      qListenedToMusic: Value(qUsedApps.contains(musicAnswerMarker)),
       submittedAt: DateTime.now().millisecondsSinceEpoch,
     );
     await _db.into(_db.sessionFeedbacks).insert(companion);

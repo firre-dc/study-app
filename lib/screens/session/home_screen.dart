@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:study_app/controllers/session_controller.dart';
-import 'package:study_app/screens/session/permissions_gate.dart';
-import 'package:study_app/screens/session/session_screen.dart';
 import 'package:study_app/services/blocker_platform.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -117,15 +115,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ],
             const SizedBox(height: 32),
             FilledButton.icon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const PermissionsGate(
-                      child: SessionScreen(),
-                    ),
-                  ),
-                );
-              },
+              // Use GoRouter (instead of Navigator.push) so the session screen
+              // is part of the route stack. Otherwise it stays underneath the
+              // survey and reappears when the survey navigates back home.
+              onPressed: () => context.go('/session'),
               icon: const Icon(Icons.play_arrow),
               label: const Text('Start Session'),
               style: FilledButton.styleFrom(
