@@ -15,7 +15,10 @@ class RecommendationService {
     required List<StudySession> allSessions,
     required List<StudySessionWithFeedback> sessionsWithFeedback,
   }) {
-    final totalMinutes = allSessions.fold(0.0, (sum, s) => sum + s.durationMinutes);
+    final totalMinutes = allSessions.fold(
+      0.0,
+      (sum, s) => sum + s.durationMinutes,
+    );
     final totalHours = totalMinutes / 60.0;
     if (totalHours < minHoursForRecommendations) return null;
 
@@ -57,7 +60,10 @@ class RecommendationService {
     required List<StudySession> allSessions,
     required List<StudySessionWithFeedback> sessionsWithFeedback,
   }) {
-    final totalMinutes = allSessions.fold(0.0, (sum, s) => sum + s.durationMinutes);
+    final totalMinutes = allSessions.fold(
+      0.0,
+      (sum, s) => sum + s.durationMinutes,
+    );
     final totalHours = totalMinutes / 60.0;
     if (totalHours < minHoursForRecommendations) return null;
 
@@ -69,11 +75,7 @@ class RecommendationService {
         bucketLabel,
         () => LengthBucket(label: bucketLabel),
       );
-      bucket.add(
-        item.feedback.qProductivity,
-        item.feedback.qMentalTired,
-        item.feedback.qSatisfaction,
-      );
+      bucket.add(item.feedback.qProductivity);
     }
 
     final eligible = buckets.values
@@ -85,8 +87,6 @@ class RecommendationService {
     eligible.sort((a, b) {
       final byScore = b.avgProductivity.compareTo(a.avgProductivity);
       if (byScore != 0) return byScore;
-      final byTired = a.avgMentalTired.compareTo(b.avgMentalTired);
-      if (byTired != 0) return byTired;
       return b.sessions.compareTo(a.sessions);
     });
 
@@ -160,20 +160,14 @@ class LengthBucket {
 
   int _count = 0;
   double _productivitySum = 0;
-  double _mentalTiredSum = 0;
-  double _satisfactionSum = 0;
 
-  void add(int productivity, int mentalTired, int satisfaction) {
+  void add(int productivity) {
     _count++;
     _productivitySum += productivity;
-    _mentalTiredSum += mentalTired;
-    _satisfactionSum += satisfaction;
   }
 
   int get sessions => _count;
   double get avgProductivity => _count == 0 ? 0 : _productivitySum / _count;
-  double get avgMentalTired => _count == 0 ? 0 : _mentalTiredSum / _count;
-  double get avgSatisfaction => _count == 0 ? 0 : _satisfactionSum / _count;
 }
 
 String lengthBucketLabel(double minutes) {

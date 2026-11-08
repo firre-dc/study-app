@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:study_app/database/database.dart';
 import 'package:study_app/providers.dart';
 import 'package:study_app/services/recommendation_service.dart';
@@ -75,7 +76,8 @@ class _DashboardBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progress = (data.totalMinutes / 60.0 / minHoursForRecommendations).clamp(0.0, 1.0);
+    final progress = (data.totalMinutes / 60.0 / minHoursForRecommendations)
+        .clamp(0.0, 1.0);
     final hasRecommendations = data.bestTime != null;
 
     return ListView(
@@ -164,7 +166,11 @@ class _StatsRow extends StatelessWidget {
 }
 
 class _StatCard extends StatelessWidget {
-  const _StatCard({required this.icon, required this.label, required this.value});
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   final IconData icon;
   final String label;
@@ -180,7 +186,11 @@ class _StatCard extends StatelessWidget {
             Icon(icon, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 8),
             Text(value, style: Theme.of(context).textTheme.titleMedium),
-            Text(label, style: Theme.of(context).textTheme.labelSmall, textAlign: TextAlign.center),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelSmall,
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
@@ -210,9 +220,15 @@ class _InsufficientDataCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.hourglass_bottom, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.hourglass_bottom,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
-                Text('Building your profile...', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Building your profile...',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -254,22 +270,39 @@ class _BestTimeCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.wb_sunny, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.wb_sunny,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
-                Text('Your Best Study Time', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Your Best Study Time',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            Text(best.display, style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              best.display,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: 8),
-            Text('Avg productivity: ${best.avgProductivity.toStringAsFixed(1)} / 10'),
+            Text(
+              'Avg productivity: ${best.avgProductivity.toStringAsFixed(1)} / 10',
+            ),
             Text('${best.sessions} sessions in this block'),
             Text(formatMinutes(best.totalMinutes)),
             const SizedBox(height: 12),
             if (data.allBuckets.length > 1) ...[
-              Text('Other good times:', style: Theme.of(context).textTheme.labelLarge),
+              Text(
+                'Other good times:',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
               const SizedBox(height: 4),
-              ...data.allBuckets.skip(1).take(3).map(
+              ...data.allBuckets
+                  .skip(1)
+                  .take(3)
+                  .map(
                     (b) => Text(
                       '• ${b.display} — avg ${b.avgProductivity.toStringAsFixed(1)} (${b.sessions} sessions)',
                       style: Theme.of(context).textTheme.bodySmall,
@@ -299,16 +332,23 @@ class _OptimalLengthCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.schedule, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.schedule,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
-                Text('Optimal Session Length', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Optimal Session Length',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ],
             ),
             const SizedBox(height: 12),
             Text(best.label, style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 8),
-            Text('Avg productivity: ${best.avgProductivity.toStringAsFixed(1)} / 10'),
-            Text('Avg satisfaction: ${best.avgSatisfaction.toStringAsFixed(1)} / 10'),
+            Text(
+              'Avg productivity: ${best.avgProductivity.toStringAsFixed(1)} / 10',
+            ),
             Text('Based on ${best.sessions} sessions'),
           ],
         ),
@@ -328,15 +368,17 @@ class _SessionTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
-        title: Text('${formatMinutes(session.durationMinutes)} — ${dayLabel(session.dayOfWeek)}, '
-            '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}'),
+        title: Text(
+          '${formatMinutes(session.durationMinutes)} — ${dayLabel(session.dayOfWeek)}, '
+          '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}',
+        ),
         subtitle: Text(
           'Time block: ${TimeBlockX.fromStorage(session.timeBlock).label}'
           '${session.endedEarly ? " · Ended early" : ""}'
           '${session.attemptsCount > 0 ? " · ${session.attemptsCount} blocked attempts" : ""}',
         ),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () {},
+        onTap: () => context.push('/dashboard/session/${session.id}'),
       ),
     );
   }

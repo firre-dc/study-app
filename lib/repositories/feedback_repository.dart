@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-import 'package:drift/drift.dart';
 import 'package:study_app/database/database.dart';
 import 'package:uuid/uuid.dart';
 
@@ -10,39 +7,20 @@ class FeedbackRepository {
 
   static const _uuid = Uuid();
 
-  /// Marker stored in [qUsedAppsJson] when music was played during a session.
-  static const musicAnswerMarker = 'music';
-
   Future<void> saveFeedback({
     required String sessionId,
     required int qProductivity,
-    required int qFocus,
-    required int qMentalTired,
-    required int qPhysicalEnergy,
-    required int qDistracted,
-    required bool qUsedWhitelisted,
-    List<String> qUsedApps = const [],
-    required int qSatisfaction,
-    String? notes,
+    required bool qDistractedByOthers,
+    required bool qConsumedCaffeine,
+    required bool qListenedToMusic,
   }) async {
     final companion = SessionFeedbacksCompanion.insert(
       id: _uuid.v4(),
       sessionId: sessionId,
       qProductivity: qProductivity,
-      qFocus: qFocus,
-      qMentalTired: qMentalTired,
-      qPhysicalEnergy: qPhysicalEnergy,
-      qDistracted: qDistracted,
-      qUsedWhitelisted: Value(qUsedWhitelisted),
-      qUsedAppsJson: Value(qUsedApps.isEmpty ? null : jsonEncode(qUsedApps)),
-      qSatisfaction: qSatisfaction,
-      notes: Value(notes),
-      // Store the current yes/no questions in dedicated columns as well. They
-      // are encoded through the legacy parameters so older callers keep using
-      // the same saveFeedback signature.
-      qDistractedByOthers: Value(qDistracted > 5),
-      qConsumedCaffeine: Value(qPhysicalEnergy > 5),
-      qListenedToMusic: Value(qUsedApps.contains(musicAnswerMarker)),
+      qDistractedByOthers: qDistractedByOthers,
+      qConsumedCaffeine: qConsumedCaffeine,
+      qListenedToMusic: qListenedToMusic,
       submittedAt: DateTime.now().millisecondsSinceEpoch,
     );
     await _db.into(_db.sessionFeedbacks).insert(companion);

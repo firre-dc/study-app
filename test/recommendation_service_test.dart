@@ -14,7 +14,9 @@ StudySession _session({
   return StudySession(
     id: 's$id',
     startTime: start.millisecondsSinceEpoch,
-    endTime: start.add(Duration(minutes: durationMinutes.round())).millisecondsSinceEpoch,
+    endTime: start
+        .add(Duration(minutes: durationMinutes.round()))
+        .millisecondsSinceEpoch,
     durationMinutes: durationMinutes,
     endedEarly: false,
     dayOfWeek: dayOfWeek,
@@ -28,21 +30,14 @@ StudySession _session({
 SessionFeedback _feedback({
   required String sessionId,
   required int productivity,
-  int mentalTired = 3,
-  int satisfaction = 7,
 }) {
   return SessionFeedback(
     id: 'f$sessionId',
     sessionId: sessionId,
     qProductivity: productivity,
-    qFocus: productivity,
-    qMentalTired: mentalTired,
-    qPhysicalEnergy: 7,
-    qDistracted: 2,
-    qUsedWhitelisted: false,
-    qUsedAppsJson: null,
-    qSatisfaction: satisfaction,
-    notes: null,
+    qDistractedByOthers: false,
+    qConsumedCaffeine: false,
+    qListenedToMusic: false,
     submittedAt: 0,
   );
 }
@@ -55,8 +50,6 @@ StudySessionWithFeedback _item({
   int dayOfWeek = 0,
   int hourOfDay = 9,
   String timeBlock = 'morning',
-  int mentalTired = 3,
-  int satisfaction = 7,
 }) {
   final s = _session(
     id: id,
@@ -66,12 +59,7 @@ StudySessionWithFeedback _item({
     hourOfDay: hourOfDay,
     timeBlock: timeBlock,
   );
-  final f = _feedback(
-    sessionId: s.id,
-    productivity: productivity,
-    mentalTired: mentalTired,
-    satisfaction: satisfaction,
-  );
+  final f = _feedback(sessionId: s.id, productivity: productivity);
   return StudySessionWithFeedback(session: s, feedback: f);
 }
 
@@ -85,11 +73,24 @@ void main() {
         _session(id: 2, start: DateTime(2026, 1, 2, 9), durationMinutes: 25),
       ];
       final withFeedback = [
-        _item(id: 1, start: DateTime(2026, 1, 1, 9), durationMinutes: 25, productivity: 8),
-        _item(id: 2, start: DateTime(2026, 1, 2, 9), durationMinutes: 25, productivity: 9),
+        _item(
+          id: 1,
+          start: DateTime(2026, 1, 1, 9),
+          durationMinutes: 25,
+          productivity: 8,
+        ),
+        _item(
+          id: 2,
+          start: DateTime(2026, 1, 2, 9),
+          durationMinutes: 25,
+          productivity: 9,
+        ),
       ];
       expect(
-        service.optimalSessionLength(allSessions: all, sessionsWithFeedback: withFeedback),
+        service.optimalSessionLength(
+          allSessions: all,
+          sessionsWithFeedback: withFeedback,
+        ),
         isNull,
       );
     });
@@ -101,24 +102,40 @@ void main() {
       final withFeedback = <StudySessionWithFeedback>[];
       for (var i = 0; i < 6; i++) {
         final dur = i < 2 ? 15.0 : (i < 4 ? 45.0 : 75.0);
-        all.add(_session(id: i, start: base.add(Duration(days: i)), durationMinutes: dur));
-        withFeedback.add(_item(
-          id: i,
-          start: base.add(Duration(days: i)),
-          durationMinutes: dur,
-          productivity: 7,
-        ));
+        all.add(
+          _session(
+            id: i,
+            start: base.add(Duration(days: i)),
+            durationMinutes: dur,
+          ),
+        );
+        withFeedback.add(
+          _item(
+            id: i,
+            start: base.add(Duration(days: i)),
+            durationMinutes: dur,
+            productivity: 7,
+          ),
+        );
       }
       // 15*2 + 45*2 + 75*2 = 270 min = 4.5h - still < 10h, add more
       // Need >= 10h: use longer durations
       for (var i = 6; i < 10; i++) {
-        all.add(_session(id: i, start: base.add(Duration(days: i)), durationMinutes: 90));
-        withFeedback.add(_item(
-          id: i,
-          start: base.add(Duration(days: i)),
-          durationMinutes: 90,
-          productivity: 6,
-        ));
+        all.add(
+          _session(
+            id: i,
+            start: base.add(Duration(days: i)),
+            durationMinutes: 90,
+          ),
+        );
+        withFeedback.add(
+          _item(
+            id: i,
+            start: base.add(Duration(days: i)),
+            durationMinutes: 90,
+            productivity: 6,
+          ),
+        );
       }
       // total: 15*2+45*2+75*2+90*4 = 30+90+150+360 = 630 min = 10.5h
       final result = service.optimalSessionLength(
@@ -139,37 +156,25 @@ void main() {
       for (var i = 0; i < 4; i++) {
         final start = base.add(Duration(days: i));
         all.add(_session(id: i, start: start, durationMinutes: 25));
-        withFeedback.add(_item(
-          id: i,
-          start: start,
-          durationMinutes: 25,
-          productivity: 9,
-          mentalTired: 2,
-        ));
+        withFeedback.add(
+          _item(id: i, start: start, durationMinutes: 25, productivity: 9),
+        );
       }
       // 50-min bucket: 4 sessions, avg productivity 6
       for (var i = 4; i < 8; i++) {
         final start = base.add(Duration(days: i));
         all.add(_session(id: i, start: start, durationMinutes: 50));
-        withFeedback.add(_item(
-          id: i,
-          start: start,
-          durationMinutes: 50,
-          productivity: 6,
-          mentalTired: 8,
-        ));
+        withFeedback.add(
+          _item(id: i, start: start, durationMinutes: 50, productivity: 6),
+        );
       }
       // total: 25*4 + 50*4 = 300 min = 5h - need more
       for (var i = 8; i < 20; i++) {
         final start = base.add(Duration(days: i));
         all.add(_session(id: i, start: start, durationMinutes: 25));
-        withFeedback.add(_item(
-          id: i,
-          start: start,
-          durationMinutes: 25,
-          productivity: 9,
-          mentalTired: 2,
-        ));
+        withFeedback.add(
+          _item(id: i, start: start, durationMinutes: 25, productivity: 9),
+        );
       }
       // total: 25*16 + 50*4 = 600 min = 10h exactly
 
@@ -189,10 +194,18 @@ void main() {
         _session(id: 1, start: DateTime(2026, 1, 1, 9), durationMinutes: 25),
       ];
       final withFeedback = [
-        _item(id: 1, start: DateTime(2026, 1, 1, 9), durationMinutes: 25, productivity: 8),
+        _item(
+          id: 1,
+          start: DateTime(2026, 1, 1, 9),
+          durationMinutes: 25,
+          productivity: 8,
+        ),
       ];
       expect(
-        service.bestStudyTime(allSessions: all, sessionsWithFeedback: withFeedback),
+        service.bestStudyTime(
+          allSessions: all,
+          sessionsWithFeedback: withFeedback,
+        ),
         isNull,
       );
     });
@@ -205,44 +218,52 @@ void main() {
       // Monday morning (dayOfWeek=0): high productivity
       for (var i = 0; i < 8; i++) {
         final start = base.add(Duration(days: i * 7)); // same day each week
-        all.add(_session(
-          id: i,
-          start: start,
-          durationMinutes: 80,
-          dayOfWeek: 0,
-          hourOfDay: 9,
-          timeBlock: 'morning',
-        ));
-        withFeedback.add(_item(
-          id: i,
-          start: start,
-          durationMinutes: 80,
-          productivity: 9,
-          dayOfWeek: 0,
-          hourOfDay: 9,
-          timeBlock: 'morning',
-        ));
+        all.add(
+          _session(
+            id: i,
+            start: start,
+            durationMinutes: 80,
+            dayOfWeek: 0,
+            hourOfDay: 9,
+            timeBlock: 'morning',
+          ),
+        );
+        withFeedback.add(
+          _item(
+            id: i,
+            start: start,
+            durationMinutes: 80,
+            productivity: 9,
+            dayOfWeek: 0,
+            hourOfDay: 9,
+            timeBlock: 'morning',
+          ),
+        );
       }
       // Wednesday evening (dayOfWeek=2): lower productivity
       for (var i = 8; i < 14; i++) {
         final start = base.add(Duration(days: (i - 8) * 7 + 2));
-        all.add(_session(
-          id: i,
-          start: start,
-          durationMinutes: 80,
-          dayOfWeek: 2,
-          hourOfDay: 20,
-          timeBlock: 'evening',
-        ));
-        withFeedback.add(_item(
-          id: i,
-          start: start,
-          durationMinutes: 80,
-          productivity: 5,
-          dayOfWeek: 2,
-          hourOfDay: 20,
-          timeBlock: 'evening',
-        ));
+        all.add(
+          _session(
+            id: i,
+            start: start,
+            durationMinutes: 80,
+            dayOfWeek: 2,
+            hourOfDay: 20,
+            timeBlock: 'evening',
+          ),
+        );
+        withFeedback.add(
+          _item(
+            id: i,
+            start: start,
+            durationMinutes: 80,
+            productivity: 5,
+            dayOfWeek: 2,
+            hourOfDay: 20,
+            timeBlock: 'evening',
+          ),
+        );
       }
       // total: 80*14 = 1120 min = 18.67h
 

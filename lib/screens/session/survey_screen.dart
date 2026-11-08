@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:study_app/controllers/session_controller.dart';
 import 'package:study_app/providers.dart';
-import 'package:study_app/repositories/feedback_repository.dart';
 import 'package:study_app/utils/time_utils.dart';
 
 class SurveyScreen extends ConsumerStatefulWidget {
@@ -44,20 +43,12 @@ class _SurveyScreenState extends ConsumerState<SurveyScreen> {
 
     setState(() => _saving = true);
     try {
-      // The survey stores the yes/no answers through the existing feedback
-      // fields; the repository also copies them to their dedicated columns.
       await feedbackRepository.saveFeedback(
         sessionId: sessionId,
         qProductivity: _productivity!,
-        qFocus: _productivity!,
-        qMentalTired: 5,
-        qPhysicalEnergy: _consumedCaffeine! ? 10 : 1,
-        qDistracted: _distractedByOthers! ? 10 : 1,
-        qUsedWhitelisted: false,
-        qUsedApps: _listenedToMusic!
-            ? const [FeedbackRepository.musicAnswerMarker]
-            : const [],
-        qSatisfaction: _productivity!,
+        qDistractedByOthers: _distractedByOthers!,
+        qConsumedCaffeine: _consumedCaffeine!,
+        qListenedToMusic: _listenedToMusic!,
       );
     } catch (_) {
       // Keep the answers on screen so the user can retry instead of leaving
@@ -76,9 +67,9 @@ class _SurveyScreenState extends ConsumerState<SurveyScreen> {
     // during saving can never make this a read from a disposed widget.
     sessionController.reset();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Session saved. Nice work!')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Session saved. Nice work!')));
     context.go('/');
   }
 
@@ -102,8 +93,7 @@ class _SurveyScreenState extends ConsumerState<SurveyScreen> {
             ),
             const SizedBox(height: 24),
             _YesNoQuestion(
-              title:
-                  'Did you consume any caffeine before/during this session?',
+              title: 'Did you consume any caffeine before/during this session?',
               value: _consumedCaffeine,
               onChanged: (v) => setState(() => _consumedCaffeine = v),
             ),
@@ -155,9 +145,14 @@ class _SessionSummary extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Session Summary', style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              'Session Summary',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 8),
-            Text('Duration: ${formatMinutes(sessionState.durationMinutes.toDouble())}'),
+            Text(
+              'Duration: ${formatMinutes(sessionState.durationMinutes.toDouble())}',
+            ),
             Text('Ended early: ${sessionState.endedEarly ? "Yes" : "No"}'),
             Text('Blocked attempts: ${sessionState.attemptsCount}'),
           ],
@@ -228,8 +223,16 @@ class _RatingQuestion extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  if (lowLabel != null) Text(lowLabel!, style: Theme.of(context).textTheme.labelSmall),
-                  if (highLabel != null) Text(highLabel!, style: Theme.of(context).textTheme.labelSmall),
+                  if (lowLabel != null)
+                    Text(
+                      lowLabel!,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  if (highLabel != null)
+                    Text(
+                      highLabel!,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
                 ],
               ),
             ),

@@ -12,11 +12,15 @@ class UserProfiles extends Table {
   TextColumn get sleepTime => text()(); // HH:mm
   TextColumn get workStartTime => text().nullable()(); // HH:mm
   TextColumn get workEndTime => text().nullable()(); // HH:mm
-  BoolColumn get drinksCaffeine => boolean().withDefault(const Constant(false))();
-  TextColumn get caffeineTiming => text().nullable()(); // morning/afternoon/evening/other
+  BoolColumn get drinksCaffeine =>
+      boolean().withDefault(const Constant(false))();
+  TextColumn get caffeineTiming =>
+      text().nullable()(); // morning/afternoon/evening/other
   TextColumn get caffeineTime => text().nullable()(); // HH:mm
-  TextColumn get chronotype => text().nullable()(); // early_bird/night_owl/normal
-  TextColumn get studyDays => text().withDefault(const Constant('[]'))(); // JSON array of 0-6
+  TextColumn get chronotype =>
+      text().nullable()(); // early_bird/night_owl/normal
+  TextColumn get studyDays =>
+      text().withDefault(const Constant('[]'))(); // JSON array of 0-6
   IntColumn get onboardingCompletedAt => integer().nullable()();
 
   @override
@@ -50,19 +54,12 @@ class StudySessions extends Table {
 
 class SessionFeedbacks extends Table {
   TextColumn get id => text()();
-  TextColumn get sessionId => text().references(StudySessions, #id, onDelete: KeyAction.cascade)();
+  TextColumn get sessionId =>
+      text().references(StudySessions, #id, onDelete: KeyAction.cascade)();
   IntColumn get qProductivity => integer()(); // 1-10
-  IntColumn get qFocus => integer()(); // 1-10
-  IntColumn get qMentalTired => integer()(); // 1=very fresh, 10=very tired
-  IntColumn get qPhysicalEnergy => integer()(); // 1=very low, 10=very high
-  IntColumn get qDistracted => integer()(); // 1=not, 10=extremely
-  BoolColumn get qUsedWhitelisted => boolean().withDefault(const Constant(false))();
-  TextColumn get qUsedAppsJson => text().nullable()(); // JSON array of package names
-  IntColumn get qSatisfaction => integer()(); // 1-10
-  TextColumn get notes => text().nullable()();
-  BoolColumn get qDistractedByOthers => boolean().nullable()();
-  BoolColumn get qConsumedCaffeine => boolean().nullable()();
-  BoolColumn get qListenedToMusic => boolean().nullable()();
+  BoolColumn get qDistractedByOthers => boolean()();
+  BoolColumn get qConsumedCaffeine => boolean()();
+  BoolColumn get qListenedToMusic => boolean()();
   IntColumn get submittedAt => integer()();
 
   @override
@@ -71,7 +68,8 @@ class SessionFeedbacks extends Table {
 
 class BlockAttempts extends Table {
   TextColumn get id => text()();
-  TextColumn get sessionId => text().references(StudySessions, #id, onDelete: KeyAction.cascade)();
+  TextColumn get sessionId =>
+      text().references(StudySessions, #id, onDelete: KeyAction.cascade)();
   TextColumn get blockedPackage => text()();
   IntColumn get attemptTime => integer()();
   TextColumn get reason => text().nullable()();
@@ -80,33 +78,42 @@ class BlockAttempts extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [
-  UserProfiles,
-  AppWhitelists,
-  StudySessions,
-  SessionFeedbacks,
-  BlockAttempts,
-])
+@DriftDatabase(
+  tables: [
+    UserProfiles,
+    AppWhitelists,
+    StudySessions,
+    SessionFeedbacks,
+    BlockAttempts,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
-        onUpgrade: (m, from, to) async {
-          // Pre-release builds may have shipped schema changes without a
-          // version bump; recreate so inserts never hit missing columns.
-          for (final entity in allSchemaEntities.toList().reversed) {
-            await m.deleteTable(entity.entityName);
-          }
-          await m.createAll();
-        },
-      );
+    onCreate: (m) => m.createAll(),
+    onUpgrade: (m, from, to) async {
+      if (from < 4) {
+        // The survey was simplified and legacy feedback can no longer be
+        // read with the new schema. Drop the old session history once,
+        // while keeping the profile and whitelist intact.
+        await m.database.customStatement('DROP TABLE IF EXISTS block_attempts');
+        await m.database.customStatement(
+          'DROP TABLE IF EXISTS session_feedbacks',
+        );
+        await m.database.customStatement('DROP TABLE IF EXISTS study_sessions');
+        await m.createTable(studySessions);
+        await m.createTable(sessionFeedbacks);
+        await m.createTable(blockAttempts);
+      }
+    },
+  );
 }
 
 LazyDatabase _openConnection() {

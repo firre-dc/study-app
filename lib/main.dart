@@ -20,7 +20,6 @@ class FocusFlowApp extends ConsumerWidget {
         useMaterial3: true,
       ),
       routerConfig: router,
-      debugShowCheckedModeBanner: false,
     );
   }
 }

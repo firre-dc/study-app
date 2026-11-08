@@ -100,30 +100,24 @@ class _FakeFeedbackRepository implements FeedbackRepository {
   Future<void> saveFeedback({
     required String sessionId,
     required int qProductivity,
-    required int qFocus,
-    required int qMentalTired,
-    required int qPhysicalEnergy,
-    required int qDistracted,
-    required bool qUsedWhitelisted,
-    List<String> qUsedApps = const [],
-    required int qSatisfaction,
-    String? notes,
+    required bool qDistractedByOthers,
+    required bool qConsumedCaffeine,
+    required bool qListenedToMusic,
   }) async {
     if (failuresRemaining > 0) {
       failuresRemaining--;
       throw StateError('database unavailable');
     }
     productivity = qProductivity;
-    distractedByOthers = qDistracted > 5;
-    consumedCaffeine = qPhysicalEnergy > 5;
-    listenedToMusic = qUsedApps.contains(
-      FeedbackRepository.musicAnswerMarker,
-    );
+    distractedByOthers = qDistractedByOthers;
+    consumedCaffeine = qConsumedCaffeine;
+    listenedToMusic = qListenedToMusic;
     saved = true;
   }
 
   @override
-  Future<SessionFeedback?> getFeedbackForSession(String sessionId) async => null;
+  Future<SessionFeedback?> getFeedbackForSession(String sessionId) async =>
+      null;
 }
 
 /// Boots the app with fake repositories so the real onboarding/router/session

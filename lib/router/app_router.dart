@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:study_app/providers.dart';
 import 'package:study_app/screens/dashboard/dashboard_screen.dart';
+import 'package:study_app/screens/dashboard/session_detail_screen.dart';
 import 'package:study_app/screens/onboarding/onboarding_flow.dart';
 import 'package:study_app/screens/onboarding/permissions_screen.dart';
 import 'package:study_app/screens/onboarding/profile_screen.dart';
@@ -30,18 +31,29 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: '/loading',
-        builder: (context, state) => const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
+        builder: (context, state) =>
+            const Scaffold(body: Center(child: CircularProgressIndicator())),
       ),
       GoRoute(
         path: '/onboarding',
         builder: (context, state) => const OnboardingFlow(),
         routes: [
-          GoRoute(path: 'welcome', builder: (context, state) => const WelcomeScreen()),
-          GoRoute(path: 'profile', builder: (context, state) => const ProfileScreen()),
-          GoRoute(path: 'whitelist', builder: (context, state) => const WhitelistScreen()),
-          GoRoute(path: 'permissions', builder: (context, state) => const PermissionsScreen()),
+          GoRoute(
+            path: 'welcome',
+            builder: (context, state) => const WelcomeScreen(),
+          ),
+          GoRoute(
+            path: 'profile',
+            builder: (context, state) => const ProfileScreen(),
+          ),
+          GoRoute(
+            path: 'whitelist',
+            builder: (context, state) => const WhitelistScreen(),
+          ),
+          GoRoute(
+            path: 'permissions',
+            builder: (context, state) => const PermissionsScreen(),
+          ),
         ],
       ),
       GoRoute(
@@ -53,14 +65,32 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) =>
                 const PermissionsGate(child: SessionScreen()),
           ),
-          GoRoute(path: 'survey', builder: (context, state) => const SurveyScreen()),
-          GoRoute(path: 'dashboard', builder: (context, state) => const DashboardScreen()),
-          GoRoute(path: 'settings', builder: (context, state) => const SettingsScreen(), routes: [
-            GoRoute(
-              path: 'whitelist',
-              builder: (context, state) => const WhitelistEditorScreen(),
-            ),
-          ]),
+          GoRoute(
+            path: 'survey',
+            builder: (context, state) => const SurveyScreen(),
+          ),
+          GoRoute(
+            path: 'dashboard',
+            builder: (context, state) => const DashboardScreen(),
+            routes: [
+              GoRoute(
+                path: 'session/:sessionId',
+                builder: (context, state) => SessionDetailScreen(
+                  sessionId: state.pathParameters['sessionId']!,
+                ),
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'settings',
+            builder: (context, state) => const SettingsScreen(),
+            routes: [
+              GoRoute(
+                path: 'whitelist',
+                builder: (context, state) => const WhitelistEditorScreen(),
+              ),
+            ],
+          ),
         ],
       ),
     ],
