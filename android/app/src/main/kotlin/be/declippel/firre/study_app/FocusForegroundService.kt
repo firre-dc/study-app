@@ -158,11 +158,13 @@ class FocusForegroundService : Service() {
         override fun run() {
             val prefs = getSharedPreferences("focusflow_session", Context.MODE_PRIVATE)
             val active = prefs.getBoolean("active", false)
+            val stopwatch = prefs.getBoolean("stopwatch", false)
             val endTime = prefs.getLong("end_time", 0)
-            Log.d(TAG, "tick: active=$active now>=endTime=${System.currentTimeMillis() >= endTime}")
+            val expired = !stopwatch && System.currentTimeMillis() >= endTime
+            Log.d(TAG, "tick: active=$active stopwatch=$stopwatch expired=$expired")
 
-            if (!active || System.currentTimeMillis() >= endTime) {
-                if (active && System.currentTimeMillis() >= endTime) {
+            if (!active || expired) {
+                if (active && expired) {
                     // Finish the session natively. The completion alert is
                     // posted here so it still fires when Flutter is frozen or
                     // dead. Clearing the session id keeps a completed session
@@ -176,6 +178,7 @@ class FocusForegroundService : Service() {
                         .remove("session_id")
                         .remove("end_time")
                         .remove("total_seconds")
+                        .remove("stopwatch")
                         .apply()
                 }
                 hideOverlay()
@@ -183,7 +186,7 @@ class FocusForegroundService : Service() {
                 return
             }
 
-            // Update notification with remaining time
+            // Update notification with remaining/elapsed time
             updateNotification()
 
             tickBlocking(prefs)
@@ -330,19 +333,20 @@ class FocusForegroundService : Service() {
         } catch (_: Exception) {}
     }
 
-    /** Periodic tick while the overlay is on screen: keeps countdown fresh
+    /** Periodic tick while the overlay is on screen: keeps the timer fresh
      *  and removes the overlay as soon as the session is over. */
     private val overlayTickRunnable = object : Runnable {
         override fun run() {
             val overlay = overlayView ?: return
             val prefs = getSharedPreferences("focusflow_session", Context.MODE_PRIVATE)
+            val stopwatch = prefs.getBoolean("stopwatch", false)
             val ended = !prefs.getBoolean("active", false) ||
-                    System.currentTimeMillis() >= prefs.getLong("end_time", 0)
+                    (!stopwatch && System.currentTimeMillis() >= prefs.getLong("end_time", 0))
             if (ended) {
                 hideOverlay()
                 return
             }
-            updateRemainingTime(prefs.getLong("end_time", 0))
+            updateTimerText(prefs)
             handler.postDelayed(this, 1000)
         }
     }
@@ -443,8 +447,20 @@ class FocusForegroundService : Service() {
         } catch (_: Exception) {}
     }
 
-    private fun updateRemainingTime(endTime: Long) {
-        val remainingMillis = (endTime - System.currentTimeMillis()).coerceAtLeast(0)
+    private fun updateTimerText(prefs: android.content.SharedPreferences) {
+        val now = System.currentTimeMillis()
+        if (prefs.getBoolean("stopwatch", false)) {
+            val startTime = prefs.getLong("start_time", now)
+            val elapsedMillis = (now - startTime).coerceAtLeast(0)
+            val minutes = elapsedMillis / 60000
+            val seconds = (elapsedMillis % 60000) / 1000
+            remainingTextView?.text =
+                "Time elapsed: $minutes:${String.format("%02d", seconds)}"
+            return
+        }
+
+        val endTime = prefs.getLong("end_time", 0)
+        val remainingMillis = (endTime - now).coerceAtLeast(0)
         val minutes = remainingMillis / 60000
         val seconds = (remainingMillis % 60000) / 1000
         remainingTextView?.text =
@@ -472,9 +488,19 @@ class FocusForegroundService : Service() {
 
     private fun buildNotification(): Notification {
         val prefs = getSharedPreferences("focusflow_session", Context.MODE_PRIVATE)
-        val endTime = prefs.getLong("end_time", 0)
-        val remainingMillis = (endTime - System.currentTimeMillis()).coerceAtLeast(0)
-        val remainingMinutes = remainingMillis / 60000
+        val now = System.currentTimeMillis()
+        val contentText = if (prefs.getBoolean("stopwatch", false)) {
+            val startTime = prefs.getLong("start_time", now)
+            val elapsedMillis = (now - startTime).coerceAtLeast(0)
+            val elapsedMinutes = elapsedMillis / 60000
+            val elapsedSeconds = (elapsedMillis % 60000) / 1000
+            "Stopwatch ${elapsedMinutes}:${String.format("%02d", elapsedSeconds)} — stay focused!"
+        } else {
+            val endTime = prefs.getLong("end_time", 0)
+            val remainingMillis = (endTime - now).coerceAtLeast(0)
+            val remainingMinutes = remainingMillis / 60000
+            "$remainingMinutes minutes remaining. Stay focused!"
+        }
 
         // Tapping the notification just opens the app; it must never end the
         // session by itself.
@@ -488,7 +514,7 @@ class FocusForegroundService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Focus session active")
-            .setContentText("$remainingMinutes minutes remaining. Stay focused!")
+            .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setOngoing(true)
             .setContentIntent(pendingIntent)

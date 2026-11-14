@@ -9,6 +9,12 @@ import 'package:uuid/uuid.dart';
 
 enum SessionState { idle, active, ended }
 
+/// How an active session measures time.
+///
+/// [countdown] runs against a fixed end time. [stopwatch] is open-ended and
+/// counts up until the user explicitly finishes it.
+enum SessionMode { countdown, stopwatch }
+
 /// Result of looking up a session left behind by a previous app process.
 enum SessionRestoreResult { none, active, ended }
 
@@ -16,19 +22,32 @@ class SessionControllerState {
   const SessionControllerState({
     required this.state,
     required this.durationMinutes,
+    this.mode = SessionMode.countdown,
     this.sessionId,
     this.remainingSeconds = 0,
+    this.elapsedSeconds = 0,
     this.endedEarly = false,
     this.attemptsCount = 0,
+    this.startedAt,
     this.endsAt,
   });
 
   final SessionState state;
   final int durationMinutes;
+  final SessionMode mode;
   final String? sessionId;
   final int remainingSeconds;
+
+  /// Seconds elapsed in a stopwatch session.
+  final int elapsedSeconds;
   final bool endedEarly;
   final int attemptsCount;
+
+  /// Wall-clock moment the session started.
+  ///
+  /// Stopwatch elapsed time is derived from this (just like the countdown is
+  /// derived from [endsAt]) so a frozen Flutter process cannot slow the clock.
+  final DateTime? startedAt;
 
   /// Wall-clock moment the session is scheduled to end.
   ///
@@ -36,24 +55,34 @@ class SessionControllerState {
   /// counter once per timer tick, so a frozen/suspended Flutter process
   /// (battery saver, Doze, OEM power management) cannot stretch the session
   /// or make the UI disagree with the native service.
+  ///
+  /// Always null for [SessionMode.stopwatch].
   final DateTime? endsAt;
+
+  bool get isStopwatch => mode == SessionMode.stopwatch;
 
   SessionControllerState copyWith({
     SessionState? state,
     int? durationMinutes,
+    SessionMode? mode,
     String? sessionId,
     int? remainingSeconds,
+    int? elapsedSeconds,
     bool? endedEarly,
     int? attemptsCount,
+    DateTime? startedAt,
     DateTime? endsAt,
   }) {
     return SessionControllerState(
       state: state ?? this.state,
       durationMinutes: durationMinutes ?? this.durationMinutes,
+      mode: mode ?? this.mode,
       sessionId: sessionId ?? this.sessionId,
       remainingSeconds: remainingSeconds ?? this.remainingSeconds,
+      elapsedSeconds: elapsedSeconds ?? this.elapsedSeconds,
       endedEarly: endedEarly ?? this.endedEarly,
       attemptsCount: attemptsCount ?? this.attemptsCount,
+      startedAt: startedAt ?? this.startedAt,
       endsAt: endsAt ?? this.endsAt,
     );
   }
@@ -103,19 +132,35 @@ class SessionController extends Notifier<SessionControllerState> {
     state = state.copyWith(durationMinutes: minutes);
   }
 
+  /// Switches between timer and stopwatch mode on the home screen.
+  ///
+  /// Mode is fixed while a session is active: changing it mid-session would
+  /// make the displayed clock disagree with the native blocker.
+  void setMode(SessionMode mode) {
+    if (state.state == SessionState.active) return;
+    state = state.copyWith(mode: mode);
+  }
+
   Future<void> startSession() async {
     if (_starting || state.state == SessionState.active) return;
     _starting = true;
 
     try {
+      final mode = state.mode;
+      final isStopwatch = mode == SessionMode.stopwatch;
       final durationMinutes = math.max(1, state.durationMinutes);
       final startTime = DateTime.now();
-      final endsAt = startTime.add(Duration(minutes: durationMinutes));
+      final endsAt = isStopwatch
+          ? null
+          : startTime.add(Duration(minutes: durationMinutes));
       final sessionId = _uuid.v4();
 
       _pendingSessionId = sessionId;
       _pendingStartTime = startTime;
-      _pendingDurationMinutes = durationMinutes;
+      // A stopwatch has no planned duration; the final row gets its real
+      // duration when the session ends. Inserting zero keeps the row valid
+      // until then and the repository's insert-or-ignore retry semantics.
+      _pendingDurationMinutes = isStopwatch ? 0 : durationMinutes;
       _sessionPersisted = false;
       _attemptsKnown = true;
       _ticksSinceAttemptsSync = 0;
@@ -123,11 +168,14 @@ class SessionController extends Notifier<SessionControllerState> {
       // Enter the active state before touching the database or the platform
       // channel. A slow/broken SQLite isolate or a stuck native call must
       // never leave the user staring at "Starting..." forever.
-      state = state.copyWith(
+      state = SessionControllerState(
         state: SessionState.active,
+        mode: mode,
+        durationMinutes: durationMinutes,
         sessionId: sessionId,
-        remainingSeconds: durationMinutes * 60,
+        remainingSeconds: isStopwatch ? 0 : durationMinutes * 60,
         endsAt: endsAt,
+        startedAt: startTime,
         endedEarly: false,
         attemptsCount: 0,
       );
@@ -199,61 +247,83 @@ class SessionController extends Notifier<SessionControllerState> {
       }
 
       final sessionId = native.sessionId!;
+      final isStopwatch = native.stopwatch;
       final totalSeconds = native.totalSeconds;
       final durationMinutes = totalSeconds > 0
           ? math.max(1, (totalSeconds / 60).round())
           : 25;
 
-      // Rebuild the countdown from the native end time without waiting for
-      // SQLite. The database may be slow or temporarily unavailable; that
-      // must not keep the user on the home-screen spinner.
-      var endsAt = native.endsAt;
-      if (endsAt == null) {
-        try {
-          final record = await ref
-              .read(sessionRepositoryProvider)
-              .getSession(sessionId)
-              .timeout(const Duration(seconds: 3));
-          if (record != null) {
-            endsAt = DateTime.fromMillisecondsSinceEpoch(record.endTime);
+      var startTime = native.startedAt;
+      DateTime? endsAt = native.endsAt;
+      var elapsedSeconds = 0;
+      int remaining = 0;
+
+      if (isStopwatch) {
+        // The native session stores the wall-clock start time. Stopwatch
+        // elapsed time is derived from it, so the clock stays correct even
+        // though Flutter was gone.
+        startTime ??= await _lookupSessionStartTime(sessionId);
+        startTime ??= DateTime.now();
+        elapsedSeconds = _secondsElapsed(startTime);
+      } else {
+        // Rebuild the countdown from the native end time without waiting for
+        // SQLite. The database may be slow or temporarily unavailable; that
+        // must not keep the user on the home-screen spinner.
+        if (endsAt == null) {
+          try {
+            final record = await ref
+                .read(sessionRepositoryProvider)
+                .getSession(sessionId)
+                .timeout(const Duration(seconds: 3));
+            if (record != null) {
+              endsAt = DateTime.fromMillisecondsSinceEpoch(record.endTime);
+              startTime ??= DateTime.fromMillisecondsSinceEpoch(
+                record.startTime,
+              );
+            }
+          } catch (_) {
+            // Fall through to the safe end-time check below.
           }
-        } catch (_) {
-          // Fall through to the safe end-time check below.
         }
-      }
-      if (endsAt == null) {
-        await BlockerPlatform.endSession();
-        return SessionRestoreResult.none;
+        if (endsAt == null) {
+          await BlockerPlatform.endSession();
+          return SessionRestoreResult.none;
+        }
+
+        final effectiveTotalSeconds = totalSeconds > 0
+            ? totalSeconds
+            : durationMinutes * 60;
+        remaining = _secondsRemaining(endsAt).clamp(0, effectiveTotalSeconds);
+        startTime ??= endsAt.subtract(Duration(minutes: durationMinutes));
       }
 
-      final effectiveTotalSeconds = totalSeconds > 0
-          ? totalSeconds
-          : durationMinutes * 60;
-      final remaining = _secondsRemaining(
-        endsAt,
-      ).clamp(0, effectiveTotalSeconds);
-
+      final sessionStart = startTime;
+      final plannedDuration = isStopwatch ? 0 : durationMinutes;
       _pendingSessionId = sessionId;
-      _pendingStartTime = endsAt.subtract(Duration(minutes: durationMinutes));
-      _pendingDurationMinutes = durationMinutes;
+      _pendingStartTime = sessionStart;
+      _pendingDurationMinutes = plannedDuration;
       _sessionPersisted = false;
       _attemptsKnown = false;
 
       state = SessionControllerState(
         state: SessionState.active,
+        mode: isStopwatch ? SessionMode.stopwatch : SessionMode.countdown,
         durationMinutes: durationMinutes,
         sessionId: sessionId,
-        remainingSeconds: remaining,
-        endsAt: endsAt,
+        remainingSeconds: isStopwatch ? 0 : remaining,
+        elapsedSeconds: elapsedSeconds,
+        startedAt: sessionStart,
+        endsAt: isStopwatch ? null : endsAt,
         attemptsCount: 0,
       );
       BlockerPlatform.setExternalSessionEndHandler(_onExternalSessionEnd);
 
       if (native.endedExternally) {
-        await _completeSession(endedEarly: true);
+        // Finishing a stopwatch is the normal way to end it, not "early".
+        await _completeSession(endedEarly: !isStopwatch);
         return SessionRestoreResult.ended;
       }
-      if (remaining <= 0) {
+      if (!isStopwatch && remaining <= 0) {
         await _completeSession(endedEarly: false);
         return SessionRestoreResult.ended;
       }
@@ -265,8 +335,8 @@ class SessionController extends Notifier<SessionControllerState> {
       unawaited(
         _loadRestoredRecord(
           sessionId: sessionId,
-          endsAt: endsAt,
-          durationMinutes: durationMinutes,
+          startTime: sessionStart,
+          durationMinutes: plannedDuration,
         ),
       );
       unawaited(_ensureNativeSessionRunning());
@@ -276,13 +346,28 @@ class SessionController extends Notifier<SessionControllerState> {
     }
   }
 
+  /// Reads the persisted start time for a native session that predates the
+  /// `startTimeMillis` field (or could not provide it).
+  Future<DateTime?> _lookupSessionStartTime(String sessionId) async {
+    try {
+      final record = await ref
+          .read(sessionRepositoryProvider)
+          .getSession(sessionId)
+          .timeout(const Duration(seconds: 3));
+      if (record == null) return null;
+      return DateTime.fromMillisecondsSinceEpoch(record.startTime);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Loads database-only details of a restored session without blocking the
   /// countdown. If the row is missing (for example because the process died
   /// before the initial write completed), it is recreated from the native
   /// session data so the session is not lost from history.
   Future<void> _loadRestoredRecord({
     required String sessionId,
-    required DateTime endsAt,
+    required DateTime startTime,
     required int durationMinutes,
   }) async {
     final repo = ref.read(sessionRepositoryProvider);
@@ -310,7 +395,7 @@ class SessionController extends Notifier<SessionControllerState> {
 
     await _persistSession(
       sessionId: sessionId,
-      startTime: endsAt.subtract(Duration(minutes: durationMinutes)),
+      startTime: startTime,
       durationMinutes: durationMinutes,
     );
     if (_pendingSessionId == sessionId && _sessionPersisted) {
@@ -327,6 +412,18 @@ class SessionController extends Notifier<SessionControllerState> {
     if (state.state != SessionState.active) {
       _timer?.cancel();
       _timer = null;
+      return;
+    }
+
+    if (state.isStopwatch) {
+      final startedAt = state.startedAt;
+      if (startedAt != null) {
+        final elapsed = _secondsElapsed(startedAt);
+        if (elapsed != state.elapsedSeconds) {
+          state = state.copyWith(elapsedSeconds: elapsed);
+        }
+      }
+      _syncAttemptsOnTick();
       return;
     }
 
@@ -350,6 +447,10 @@ class SessionController extends Notifier<SessionControllerState> {
       state = state.copyWith(remainingSeconds: remaining);
     }
 
+    _syncAttemptsOnTick();
+  }
+
+  void _syncAttemptsOnTick() {
     _ticksSinceAttemptsSync++;
     if (_ticksSinceAttemptsSync >= 5) {
       _ticksSinceAttemptsSync = 0;
@@ -365,6 +466,14 @@ class SessionController extends Notifier<SessionControllerState> {
     return (millis / 1000).ceil();
   }
 
+  /// Seconds elapsed according to the wall clock, rounded down like a normal
+  /// stopwatch.
+  int _secondsElapsed(DateTime startedAt) {
+    final millis = DateTime.now().difference(startedAt).inMilliseconds;
+    if (millis <= 0) return 0;
+    return millis ~/ 1000;
+  }
+
   /// Called when the app comes back to the foreground. A session may have
   /// expired or been ended natively while Flutter was frozen, and the timer
   /// may have missed ticks entirely.
@@ -378,13 +487,23 @@ class SessionController extends Notifier<SessionControllerState> {
     await _syncAttemptsFromBlocker();
     if (state.state != SessionState.active) return;
 
-    _refreshRemaining();
+    _refreshTimer();
     if (state.state != SessionState.active) return;
 
     await _ensureNativeSessionRunning();
   }
 
-  void _refreshRemaining() {
+  void _refreshTimer() {
+    if (state.isStopwatch) {
+      final startedAt = state.startedAt;
+      if (startedAt == null) return;
+      final elapsed = _secondsElapsed(startedAt);
+      if (elapsed != state.elapsedSeconds) {
+        state = state.copyWith(elapsedSeconds: elapsed);
+      }
+      return;
+    }
+
     final endsAt = state.endsAt;
     if (endsAt == null) return;
     final remaining = _secondsRemaining(endsAt);
@@ -402,17 +521,19 @@ class SessionController extends Notifier<SessionControllerState> {
   /// Starting the same session again is idempotent natively.
   Future<void> _ensureNativeSessionRunning({bool checkExternal = true}) async {
     final sessionId = state.sessionId;
+    final isStopwatch = state.isStopwatch;
     final endsAt = state.endsAt;
     if (_completing ||
         state.state != SessionState.active ||
         sessionId == null ||
-        endsAt == null) {
+        (!isStopwatch && endsAt == null)) {
       return;
     }
 
     try {
       if (checkExternal) {
         final native = await BlockerPlatform.getActiveSession();
+        if (!ref.mounted) return;
         if (_completing ||
             state.state != SessionState.active ||
             state.sessionId != sessionId) {
@@ -422,17 +543,18 @@ class SessionController extends Notifier<SessionControllerState> {
         if (native != null &&
             native.endedExternally &&
             native.sessionId == sessionId) {
-          await _completeSession(endedEarly: true);
+          await _completeSession(endedEarly: !isStopwatch);
           return;
         }
       }
 
-      if (!endsAt.isAfter(DateTime.now())) {
+      if (!isStopwatch && !endsAt!.isAfter(DateTime.now())) {
         await _completeSession(endedEarly: false);
         return;
       }
 
       final whitelist = await ref.read(whitelistRepositoryProvider).getAll();
+      if (!ref.mounted) return;
       if (_completing ||
           state.state != SessionState.active ||
           state.sessionId != sessionId) {
@@ -440,9 +562,10 @@ class SessionController extends Notifier<SessionControllerState> {
       }
       await BlockerPlatform.startSession(
         sessionId: sessionId,
-        endTime: endsAt,
-        totalSeconds: state.durationMinutes * 60,
+        endTime: isStopwatch ? null : endsAt,
+        totalSeconds: isStopwatch ? 0 : state.durationMinutes * 60,
         whitelist: whitelist.map((w) => w.packageName).toList(),
+        stopwatch: isStopwatch,
       );
     } catch (_) {
       // Best effort. The countdown already runs, and the next resume (or a
@@ -458,6 +581,7 @@ class SessionController extends Notifier<SessionControllerState> {
       return;
     }
     final blockedPackages = await BlockerPlatform.consumePendingAttempts();
+    if (!ref.mounted) return;
     if (blockedPackages.isEmpty || state.sessionId != sessionId) {
       return;
     }
@@ -470,6 +594,7 @@ class SessionController extends Notifier<SessionControllerState> {
       // A database hiccup must not break the countdown. The attempts were
       // already consumed natively, so keep the in-memory count in sync.
     }
+    if (!ref.mounted) return;
     if (state.sessionId == sessionId && state.state == SessionState.active) {
       state = state.copyWith(
         attemptsCount: state.attemptsCount + blockedPackages.length,
@@ -479,11 +604,21 @@ class SessionController extends Notifier<SessionControllerState> {
 
   void _onExternalSessionEnd() {
     if (state.state != SessionState.active) return;
-    _completeSession(endedEarly: true);
+    // Ending a stopwatch from the blocking overlay is how it normally ends;
+    // only a countdown can be "ended early" by the user.
+    _completeSession(endedEarly: !state.isStopwatch);
   }
 
   Future<void> endEarly() async {
     await _completeSession(endedEarly: true);
+  }
+
+  /// Ends the session in the normal way for the current mode.
+  ///
+  /// A countdown is ended early when the user stops it, while a stopwatch is
+  /// simply finished at whatever duration it reached.
+  Future<void> finishSession() async {
+    await _completeSession(endedEarly: !state.isStopwatch);
   }
 
   Future<void> _completeSession({required bool endedEarly}) async {
@@ -495,12 +630,20 @@ class SessionController extends Notifier<SessionControllerState> {
 
     try {
       final sessionId = state.sessionId;
+      final isStopwatch = state.isStopwatch;
+      final startedAt = state.startedAt;
       final endsAt = state.endsAt;
       final attemptsCount = state.attemptsCount;
       final attemptsKnown = _attemptsKnown;
       final durationMinutes = state.durationMinutes;
+      final elapsedSeconds = isStopwatch
+          ? (startedAt == null
+                ? state.elapsedSeconds
+                : _secondsElapsed(startedAt))
+          : state.elapsedSeconds;
       final startTime =
           _pendingStartTime ??
+          startedAt ??
           (endsAt?.subtract(Duration(minutes: durationMinutes)) ??
               DateTime.now());
 
@@ -510,6 +653,7 @@ class SessionController extends Notifier<SessionControllerState> {
         state = SessionControllerState(
           state: SessionState.idle,
           durationMinutes: state.durationMinutes,
+          mode: state.mode,
         );
         return;
       }
@@ -520,6 +664,7 @@ class SessionController extends Notifier<SessionControllerState> {
         state: SessionState.ended,
         endedEarly: endedEarly,
         remainingSeconds: 0,
+        elapsedSeconds: elapsedSeconds,
       );
 
       unawaited(
@@ -531,6 +676,7 @@ class SessionController extends Notifier<SessionControllerState> {
           scheduledEnd: endsAt,
           attemptsCount: attemptsCount,
           attemptsKnown: attemptsKnown,
+          isStopwatch: isStopwatch,
         ),
       );
     } finally {
@@ -551,19 +697,26 @@ class SessionController extends Notifier<SessionControllerState> {
     required DateTime? scheduledEnd,
     required int attemptsCount,
     required bool attemptsKnown,
+    required bool isStopwatch,
   }) async {
     var attempts = attemptsCount;
+    // A stopwatch had no planned duration; the initial row (if it still has
+    // to be written) is finalized below from the actual start/end times.
+    final plannedDuration = isStopwatch ? 0 : durationMinutes;
 
     // Collect attempts recorded natively during the final seconds.
     final pending = await BlockerPlatform.consumePendingAttempts();
     // Do not tear down the native service if the user already started a new
-    // session while this cleanup was in flight.
+    // session while this cleanup was in flight. The provider may also have
+    // been disposed (app shutdown or test teardown); cleanup still completes,
+    // but state must not be touched in that case.
     final newerSessionRunning =
+        ref.mounted &&
         state.state == SessionState.active &&
         state.sessionId != null &&
         state.sessionId != sessionId;
     if (!newerSessionRunning) {
-      if (endedEarly) {
+      if (endedEarly || isStopwatch) {
         await BlockerPlatform.endSession();
       } else {
         // Natural completion: let the native side show the completion
@@ -576,7 +729,7 @@ class SessionController extends Notifier<SessionControllerState> {
     await _persistSession(
       sessionId: sessionId,
       startTime: startTime,
-      durationMinutes: durationMinutes,
+      durationMinutes: plannedDuration,
     );
 
     if (pending.isNotEmpty) {
@@ -600,15 +753,17 @@ class SessionController extends Notifier<SessionControllerState> {
             sessionId,
             endedEarly: endedEarly,
             attemptsCount: attemptsKnown ? attempts : null,
-            // A naturally completed session ended when it was scheduled to,
-            // not when Flutter happened to notice (possibly hours later
-            // after being frozen by battery saver).
-            endedAt: endedEarly ? DateTime.now() : scheduledEnd,
+            // A naturally completed countdown ended when it was scheduled to,
+            // not when Flutter happened to notice (possibly hours later after
+            // being frozen by battery saver). Stopwatches and early endings
+            // always finish now.
+            endedAt: endedEarly || isStopwatch ? DateTime.now() : scheduledEnd,
           );
     } catch (_) {
       // Nothing else to do; the session is over from the user's point of view.
     }
 
+    if (!ref.mounted) return;
     if (attemptsKnown &&
         state.sessionId == sessionId &&
         state.state == SessionState.ended &&
@@ -630,6 +785,7 @@ class SessionController extends Notifier<SessionControllerState> {
     state = SessionControllerState(
       state: SessionState.idle,
       durationMinutes: state.durationMinutes,
+      mode: state.mode,
     );
   }
 }

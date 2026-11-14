@@ -44,8 +44,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   /// management while the native foreground service kept the session alive.
   /// Pick that session back up instead of silently losing it.
   Future<void> _restoreSession() async {
-    final result =
-        await ref.read(sessionControllerProvider.notifier).restoreActiveSession();
+    final result = await ref
+        .read(sessionControllerProvider.notifier)
+        .restoreActiveSession();
     if (!mounted) return;
     setState(() => _restoring = false);
     if (result == SessionRestoreResult.active) {
@@ -83,8 +84,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final minHeight =
-              constraints.maxHeight > 48 ? constraints.maxHeight - 48 : 0.0;
+          final minHeight = constraints.maxHeight > 48
+              ? constraints.maxHeight - 48
+              : 0.0;
           return SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
@@ -92,45 +94,79 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-            Text(
-              'Ready to focus?',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Pick a duration and start a session.',
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-            const SizedBox(height: 32),
-            _DurationPicker(
-              current: sessionState.durationMinutes,
-              onChanged: (v) =>
-                  ref.read(sessionControllerProvider.notifier).setDurationMinutes(v),
-            ),
-            if (!_ignoringBatteryOptimizations) ...[
-              const SizedBox(height: 24),
-              _BatteryWarningCard(
-                onAllow: () => BlockerPlatform.requestIgnoreBatteryOptimizations(),
-              ),
-            ],
-            const SizedBox(height: 32),
-            FilledButton.icon(
-              // Use GoRouter (instead of Navigator.push) so the session screen
-              // is part of the route stack. Otherwise it stays underneath the
-              // survey and reappears when the survey navigates back home.
-              onPressed: () => context.go('/session'),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Start Session'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-              ),
-            ),
-            const SizedBox(height: 24),
-            TextButton.icon(
-              onPressed: () => context.go('/dashboard'),
-              icon: const Icon(Icons.insights),
-              label: const Text('View Dashboard'),
-            ),
+                  Text(
+                    'Ready to focus?',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    sessionState.mode == SessionMode.stopwatch
+                        ? 'Start an open-ended session and finish when you are done.'
+                        : 'Pick a duration and start a session.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 24),
+                  SegmentedButton<SessionMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: SessionMode.countdown,
+                        icon: Icon(Icons.timer_outlined),
+                        label: Text('Timer'),
+                      ),
+                      ButtonSegment(
+                        value: SessionMode.stopwatch,
+                        icon: Icon(Icons.timer),
+                        label: Text('Stopwatch'),
+                      ),
+                    ],
+                    selected: {sessionState.mode},
+                    onSelectionChanged: (selection) => ref
+                        .read(sessionControllerProvider.notifier)
+                        .setMode(selection.first),
+                  ),
+                  const SizedBox(height: 32),
+                  if (sessionState.mode == SessionMode.stopwatch)
+                    const _StopwatchInfo()
+                  else
+                    _DurationPicker(
+                      current: sessionState.durationMinutes,
+                      onChanged: (v) => ref
+                          .read(sessionControllerProvider.notifier)
+                          .setDurationMinutes(v),
+                    ),
+                  if (!_ignoringBatteryOptimizations) ...[
+                    const SizedBox(height: 24),
+                    _BatteryWarningCard(
+                      onAllow: () =>
+                          BlockerPlatform.requestIgnoreBatteryOptimizations(),
+                    ),
+                  ],
+                  const SizedBox(height: 32),
+                  FilledButton.icon(
+                    // Use GoRouter (instead of Navigator.push) so the session screen
+                    // is part of the route stack. Otherwise it stays underneath the
+                    // survey and reappears when the survey navigates back home.
+                    onPressed: () => context.go('/session'),
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text(
+                      sessionState.mode == SessionMode.stopwatch
+                          ? 'Start Stopwatch'
+                          : 'Start Session',
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 16,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  TextButton.icon(
+                    onPressed: () => context.go('/dashboard'),
+                    icon: const Icon(Icons.insights),
+                    label: const Text('View Dashboard'),
+                  ),
                 ],
               ),
             ),
@@ -164,8 +200,8 @@ class _BatteryWarningCard extends StatelessWidget {
                   child: Text(
                     'Battery saver can stop your session',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: colorScheme.onErrorContainer,
-                        ),
+                      color: colorScheme.onErrorContainer,
+                    ),
                   ),
                 ),
               ],
@@ -188,6 +224,39 @@ class _BatteryWarningCard extends StatelessWidget {
   }
 }
 
+class _StopwatchInfo extends StatelessWidget {
+  const _StopwatchInfo();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      color: colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Icon(Icons.timer, size: 40, color: colorScheme.primary),
+            const SizedBox(height: 8),
+            Text(
+              'Stopwatch mode',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'The clock counts up instead of down. Focus for as long as you '
+              'like, then tap Finish to save the session and answer the '
+              'feedback questions.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DurationPicker extends StatelessWidget {
   const _DurationPicker({required this.current, required this.onChanged});
 
@@ -200,7 +269,10 @@ class _DurationPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text('$current minutes', style: Theme.of(context).textTheme.headlineSmall),
+        Text(
+          '$current minutes',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,

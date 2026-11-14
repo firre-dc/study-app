@@ -190,4 +190,51 @@ void main() {
       );
     },
   );
+
+  test('stopwatch counts up and finishes without being marked early', () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(
+      const MethodChannel('focusflow/blocker'),
+      (call) async {
+        switch (call.method) {
+          case 'getActiveSession':
+            return null;
+          case 'consumePendingAttempts':
+            return <String>[];
+          default:
+            return null;
+        }
+      },
+    );
+
+    final container = ProviderContainer(
+      overrides: [
+        sessionRepositoryProvider.overrideWithValue(_FakeSessionRepository()),
+        whitelistRepositoryProvider.overrideWithValue(_FakeWhitelist()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final notifier = container.read(sessionControllerProvider.notifier);
+    notifier.setMode(SessionMode.stopwatch);
+    await notifier.startSession();
+
+    final started = container.read(sessionControllerProvider);
+    expect(started.state, SessionState.active);
+    expect(started.mode, SessionMode.stopwatch);
+    expect(started.endsAt, isNull);
+    expect(started.remainingSeconds, 0);
+    expect(started.elapsedSeconds, 0);
+
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+
+    final ticking = container.read(sessionControllerProvider);
+    expect(ticking.elapsedSeconds, greaterThanOrEqualTo(1));
+
+    await notifier.finishSession().timeout(const Duration(seconds: 1));
+    final finished = container.read(sessionControllerProvider);
+    expect(finished.state, SessionState.ended);
+    expect(finished.endedEarly, isFalse);
+  });
 }

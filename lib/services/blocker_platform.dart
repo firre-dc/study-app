@@ -13,6 +13,8 @@ class NativeSessionState {
     required this.endsAt,
     required this.totalSeconds,
     required this.endedExternally,
+    required this.stopwatch,
+    required this.startedAt,
   });
 
   final bool active;
@@ -23,10 +25,17 @@ class NativeSessionState {
   /// True when the user pressed "End Session" on the native blocking overlay.
   final bool endedExternally;
 
+  /// True when the native session is an open-ended stopwatch.
+  final bool stopwatch;
+
+  /// Wall-clock moment the native session started.
+  final DateTime? startedAt;
+
   static NativeSessionState? fromMap(Map<Object?, Object?>? map) {
     if (map == null) return null;
     final sessionId = map['sessionId'] as String?;
     final endTimeMillis = (map['endTimeMillis'] as num?)?.toInt() ?? 0;
+    final startTimeMillis = (map['startTimeMillis'] as num?)?.toInt() ?? 0;
     return NativeSessionState(
       active: map['active'] == true,
       sessionId: (sessionId == null || sessionId.isEmpty) ? null : sessionId,
@@ -35,6 +44,10 @@ class NativeSessionState {
           : null,
       totalSeconds: (map['totalSeconds'] as num?)?.toInt() ?? 0,
       endedExternally: map['endedExternally'] == true,
+      stopwatch: map['stopwatch'] == true,
+      startedAt: startTimeMillis > 0
+          ? DateTime.fromMillisecondsSinceEpoch(startTimeMillis)
+          : null,
     );
   }
 }
@@ -148,17 +161,19 @@ class BlockerPlatform {
 
   static Future<void> startSession({
     required String sessionId,
-    required DateTime endTime,
+    required DateTime? endTime,
     required int totalSeconds,
     required List<String> whitelist,
+    bool stopwatch = false,
   }) async {
     try {
       await _channel
           .invokeMethod('startSession', <String, dynamic>{
             'sessionId': sessionId,
-            'endTimeMillis': endTime.millisecondsSinceEpoch,
+            'endTimeMillis': endTime?.millisecondsSinceEpoch ?? 0,
             'totalSeconds': totalSeconds,
             'whitelist': jsonEncode(whitelist),
+            'stopwatch': stopwatch,
           })
           .timeout(_startTimeout);
     } catch (_) {

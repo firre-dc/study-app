@@ -139,6 +139,9 @@ class _SessionSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final duration = sessionState.isStopwatch
+        ? formatMinutes(sessionState.elapsedSeconds / 60)
+        : formatMinutes(sessionState.durationMinutes.toDouble());
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -150,9 +153,8 @@ class _SessionSummary extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            Text(
-              'Duration: ${formatMinutes(sessionState.durationMinutes.toDouble())}',
-            ),
+            Text('Duration: $duration'),
+            if (sessionState.isStopwatch) const Text('Mode: Stopwatch'),
             Text('Ended early: ${sessionState.endedEarly ? "Yes" : "No"}'),
             Text('Blocked attempts: ${sessionState.attemptsCount}'),
           ],

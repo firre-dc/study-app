@@ -40,6 +40,7 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
   @override
   Widget build(BuildContext context) {
     final sessionState = ref.watch(sessionControllerProvider);
+    final isStopwatch = sessionState.isStopwatch;
 
     ref.listen<SessionControllerState>(sessionControllerProvider, (prev, next) {
       if (next.state == SessionState.ended) {
@@ -63,52 +64,94 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                 children: [
                   Text(
                     sessionState.state == SessionState.active
-                        ? 'Stay focused!'
+                        ? (isStopwatch ? 'Stopwatch running!' : 'Stay focused!')
                         : 'Starting...',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Session in progress',
+                    isStopwatch
+                        ? 'The clock counts up — finish whenever you are done'
+                        : 'Session in progress',
+                    textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: 240,
                     height: 240,
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        CircularProgressIndicator(
-                          value: progress,
-                          strokeWidth: 12,
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.surfaceContainerHighest,
-                        ),
-                        Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                formatDuration(remaining),
-                                style: Theme.of(context).textTheme.displayMedium
-                                    ?.copyWith(
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures(),
-                                      ],
-                                    ),
+                    child: isStopwatch
+                        ? DecoratedBox(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Theme.of(context).colorScheme.primary,
+                                width: 12,
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'remaining',
-                                style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    formatDuration(sessionState.elapsedSeconds),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .displayMedium
+                                        ?.copyWith(
+                                          fontFeatures: const [
+                                            FontFeature.tabularFigures(),
+                                          ],
+                                        ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'elapsed',
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              CircularProgressIndicator(
+                                value: progress,
+                                strokeWidth: 12,
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
+                              ),
+                              Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      formatDuration(remaining),
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .displayMedium
+                                          ?.copyWith(
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures(),
+                                            ],
+                                          ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'remaining',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyMedium,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
-                        ),
-                      ],
-                    ),
                   ),
                   const SizedBox(height: 32),
                   if (sessionState.attemptsCount > 0)
@@ -121,11 +164,13 @@ class _SessionScreenState extends ConsumerState<SessionScreen> {
                     onPressed: () async {
                       await ref
                           .read(sessionControllerProvider.notifier)
-                          .endEarly();
+                          .finishSession();
                       if (context.mounted) context.go('/survey');
                     },
                     style: TextButton.styleFrom(foregroundColor: Colors.orange),
-                    child: const Text('End session early'),
+                    child: Text(
+                      isStopwatch ? 'Finish session' : 'End session early',
+                    ),
                   ),
                 ],
               ),

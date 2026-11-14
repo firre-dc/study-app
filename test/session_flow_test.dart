@@ -90,39 +90,7 @@ void main() {
   testWidgets('start session enters active state and counts down', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({'onboarding_complete': true});
-
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel('focusflow/blocker'), (
-          call,
-        ) async {
-          switch (call.method) {
-            case 'isUsageAccessGranted':
-            case 'canDrawOverlays':
-            case 'isIgnoringBatteryOptimizations':
-              return true;
-            case 'getActiveSession':
-              return null;
-            case 'consumePendingAttempts':
-              return <String>[];
-            default:
-              return null;
-          }
-        });
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          profileRepositoryProvider.overrideWithValue(_FakeProfileRepository()),
-          whitelistRepositoryProvider.overrideWithValue(
-            _FakeWhitelistRepository(),
-          ),
-          sessionRepositoryProvider.overrideWithValue(_FakeSessionRepository()),
-        ],
-        child: const FocusFlowApp(),
-      ),
-    );
-    await tester.pumpAndSettle();
+    final container = await _pumpApp(tester);
 
     expect(find.text('Start Session'), findsOneWidget);
     await tester.tap(find.text('Start Session'));
@@ -130,9 +98,6 @@ void main() {
 
     expect(find.text('Starting...'), findsNothing);
 
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(FocusFlowApp)),
-    );
     final state = container.read(sessionControllerProvider);
     expect(state.state, SessionState.active);
     expect(state.remainingSeconds, 25 * 60);
@@ -148,4 +113,72 @@ void main() {
       lessThan(1500),
     );
   });
+
+  testWidgets('stopwatch mode starts an open-ended session and can finish', (
+    tester,
+  ) async {
+    final container = await _pumpApp(tester);
+
+    await tester.tap(find.text('Stopwatch'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Start Stopwatch'), findsOneWidget);
+    expect(find.text('Stopwatch mode'), findsOneWidget);
+    expect(find.text('25 minutes'), findsNothing);
+
+    await tester.tap(find.text('Start Stopwatch'));
+    await tester.pumpAndSettle();
+
+    final state = container.read(sessionControllerProvider);
+    expect(state.state, SessionState.active);
+    expect(state.mode, SessionMode.stopwatch);
+    expect(state.endsAt, isNull);
+    expect(find.text('Finish session'), findsOneWidget);
+    expect(find.text('00:00'), findsOneWidget);
+
+    await tester.tap(find.text('Finish session'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Session Feedback'), findsOneWidget);
+    expect(find.text('Mode: Stopwatch'), findsOneWidget);
+    expect(find.text('Ended early: No'), findsOneWidget);
+  });
+}
+
+Future<ProviderContainer> _pumpApp(WidgetTester tester) async {
+  SharedPreferences.setMockInitialValues({'onboarding_complete': true});
+
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(const MethodChannel('focusflow/blocker'), (
+        call,
+      ) async {
+        switch (call.method) {
+          case 'isUsageAccessGranted':
+          case 'canDrawOverlays':
+          case 'isIgnoringBatteryOptimizations':
+            return true;
+          case 'getActiveSession':
+            return null;
+          case 'consumePendingAttempts':
+            return <String>[];
+          default:
+            return null;
+        }
+      });
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        profileRepositoryProvider.overrideWithValue(_FakeProfileRepository()),
+        whitelistRepositoryProvider.overrideWithValue(
+          _FakeWhitelistRepository(),
+        ),
+        sessionRepositoryProvider.overrideWithValue(_FakeSessionRepository()),
+      ],
+      child: const FocusFlowApp(),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  return ProviderScope.containerOf(tester.element(find.byType(FocusFlowApp)));
 }

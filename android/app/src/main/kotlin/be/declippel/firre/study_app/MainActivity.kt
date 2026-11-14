@@ -86,7 +86,8 @@ class MainActivity : FlutterActivity() {
             sessionId = "emulator-debug",
             endTimeMillis = now + 10 * 60_000,
             totalSeconds = 600,
-            whitelistJson = "[]"
+            whitelistJson = "[]",
+            stopwatch = false
         )
     }
 
@@ -94,7 +95,8 @@ class MainActivity : FlutterActivity() {
         sessionId: String,
         endTimeMillis: Long,
         totalSeconds: Int,
-        whitelistJson: String
+        whitelistJson: String,
+        stopwatch: Boolean
     ) {
         // A new session replaces any completion alert left in the tray.
         SessionNotifications.clearCompletion(this)
@@ -121,6 +123,7 @@ class MainActivity : FlutterActivity() {
             .putLong("end_time", endTimeMillis)
             .putInt("total_seconds", totalSeconds)
             .putString("whitelist", whitelist.toString())
+            .putBoolean("stopwatch", stopwatch)
             .putBoolean("ended_externally", false)
         if (!sameSession) {
             // Never leak attempts from a previous session into this one.
@@ -157,8 +160,10 @@ class MainActivity : FlutterActivity() {
 
         // Guard against notifying before the scheduled end (small tolerance
         // for clock/rounding differences between Dart and the native side).
+        // Stopwatches have no scheduled end and are only completed explicitly.
+        val stopwatch = prefs.getBoolean("stopwatch", false)
         val endTime = prefs.getLong("end_time", 0L)
-        if (endTime > 0 && System.currentTimeMillis() + 2_000 < endTime) {
+        if (!stopwatch && endTime > 0 && System.currentTimeMillis() + 2_000 < endTime) {
             return
         }
 
@@ -170,6 +175,7 @@ class MainActivity : FlutterActivity() {
             .remove("session_id")
             .remove("end_time")
             .remove("total_seconds")
+            .remove("stopwatch")
             .apply()
 
         stopService(Intent(this, FocusForegroundService::class.java))
@@ -236,18 +242,27 @@ class MainActivity : FlutterActivity() {
                             "active" to prefs.getBoolean("active", false),
                             "sessionId" to prefs.getString("session_id", null),
                             "endTimeMillis" to prefs.getLong("end_time", 0L),
+                            "startTimeMillis" to prefs.getLong("start_time", 0L),
                             "totalSeconds" to prefs.getInt("total_seconds", 0),
+                            "stopwatch" to prefs.getBoolean("stopwatch", false),
                             "endedExternally" to prefs.getBoolean("ended_externally", false)
                         )
                     )
                 }
                 "startSession" -> {
                     val sessionId = call.argument<String>("sessionId")!!
-                    val endTimeMillis = call.argument<Long>("endTimeMillis")!!
-                    val totalSeconds = call.argument<Int>("totalSeconds")!!
+                    val endTimeMillis = call.argument<Long>("endTimeMillis") ?: 0L
+                    val totalSeconds = call.argument<Int>("totalSeconds") ?: 0
                     val whitelistJson = call.argument<String>("whitelist")!!
+                    val stopwatch = call.argument<Boolean>("stopwatch") ?: false
 
-                    startSessionInternal(sessionId, endTimeMillis, totalSeconds, whitelistJson)
+                    startSessionInternal(
+                        sessionId,
+                        endTimeMillis,
+                        totalSeconds,
+                        whitelistJson,
+                        stopwatch
+                    )
                     result.success(null)
                 }
                 "completeSession" -> {
@@ -268,6 +283,7 @@ class MainActivity : FlutterActivity() {
                         .remove("session_id")
                         .remove("end_time")
                         .remove("total_seconds")
+                        .remove("stopwatch")
                         .apply()
 
                     stopService(Intent(this, FocusForegroundService::class.java))
